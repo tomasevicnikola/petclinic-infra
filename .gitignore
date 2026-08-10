@@ -1,0 +1,58 @@
+# Terraform
+# State holds secrets in plaintext, even when the code doesn't. It lives in GCS.
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# .terraform.lock.hcl stays in git - it pins provider versions.
+.terraform/
+.terraform.tfstate.lock.info
+
+# Plans are CI artifacts, not source.
+tfplan
+*.tfplan
+*.tfplan.json
+
+# Variable files are ignored wholesale - they are the usual place a password
+# gets pasted "just for a second". Committed examples must be *.example.
+*.tfvars
+*.tfvars.json
+!*.auto.tfvars.example
+
+# Credentials
+# CI uses Workload Identity Federation, so these shouldn't exist at all.
+# Here just in case one ever lands on disk.
+*-key.json
+*_key.json
+credentials.json
+application_default_credentials.json
+*.pem
+*.p12
+id_rsa*
+id_ed25519*
+
+# Vault password comes from Secret Manager at runtime.
+.vault_pass*
+vault_password_file
+
+.env
+.env.*
+!.env.example
+
+# Ansible
+*.retry
+.ansible/
+fact_cache/
+
+# Tooling, editors, OS
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+.idea/
+.vscode/
+*.swp
+
+.DS_Store
