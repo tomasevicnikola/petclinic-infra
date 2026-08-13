@@ -1,0 +1,14 @@
+scan:
+  scanners:
+    - misconfig
+
+severity:
+  - HIGH
+  - CRITICAL
+
+exit-code: 1
+
+misconfiguration:
+  include-non-failures: false
+  terraform:
+    exclude-downloaded-modules: true
