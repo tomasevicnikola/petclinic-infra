@@ -1,0 +1,304 @@
+name: terraform ci
+
+on:
+  pull_request:
+    paths:
+      - "envs/**"
+      - "modules/**"
+      - ".tflint.hcl"
+      - "trivy.yaml"
+      - ".github/workflows/**"
+
+permissions: {}
+
+concurrency:
+  group: terraform-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: "1.15.6"
+  TFLINT_VERSION: "v0.64.0"
+  ACTIONLINT_VERSION: "1.7.7"
+  ACTIONLINT_SHA256: "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
+  TRIVY_VERSION: "0.73.0"
+  TRIVY_SHA256: "2edd39da482bb4e9831962487b68f68e3928ec3137794757f54d00383d79547b"
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform.d/plugin-cache
+  WIF_PROVIDER: projects/923128095631/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  WIF_SERVICE_ACCOUNT: sa-terraform@petclinic-capstone.iam.gserviceaccount.com
+
+jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive -diff
+
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-providers-${{ runner.os }}-${{ hashFiles('envs/dev/.terraform.lock.hcl') }}
+          restore-keys: tf-providers-${{ runner.os }}-
+
+      - name: terraform init
+        working-directory: envs/dev
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          terraform init -backend=false -lockfile=readonly
+
+      - name: terraform validate
+        working-directory: envs/dev
+        run: terraform validate
+
+  tflint:
+    name: tflint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: terraform-linters/setup-tflint@6e1e0642c0289bd619021bf6b34e3c08ed1e005a # v6
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+
+      - name: tflint --init
+        run: tflint --init --config "${GITHUB_WORKSPACE}/.tflint.hcl"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: tflint
+        run: tflint --recursive --config "${GITHUB_WORKSPACE}/.tflint.hcl" --format compact
+
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: actionlint
+        run: |
+          curl -sSLo actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c -
+          tar xzf actionlint.tar.gz actionlint
+          ./actionlint -color
+
+  scan:
+    name: security scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: trivy config scan
+        run: |
+          curl -sSLo trivy.tar.gz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_SHA256}  trivy.tar.gz" | sha256sum -c -
+          tar xzf trivy.tar.gz trivy
+          ./trivy config .
+
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [fmt, validate, tflint, actionlint, scan]
+
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: tf-providers-${{ runner.os }}-${{ hashFiles('envs/dev/.terraform.lock.hcl') }}
+          restore-keys: tf-providers-${{ runner.os }}-
+
+      - name: authenticate to gcp
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
+
+      - name: terraform init
+        working-directory: envs/dev
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          terraform init -lockfile=readonly
+
+      - name: terraform plan
+        id: plan
+        working-directory: envs/dev
+        run: |
+          set +e
+          terraform plan -no-color -lock-timeout=5m -detailed-exitcode -out=tfplan
+          code=$?
+          set -e
+          echo "exitcode=${code}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: render plan
+        if: steps.plan.outputs.exitcode == '0' || steps.plan.outputs.exitcode == '2'
+        working-directory: envs/dev
+        run: terraform show -no-color tfplan > plan.txt
+
+      - name: build pr comment
+        env:
+          CODE: ${{ steps.plan.outputs.exitcode }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        working-directory: envs/dev
+        run: |
+          LIMIT=50000
+
+          case "$CODE" in
+            0) HEADER="**No changes.** Infrastructure matches the configuration." ;;
+            2) HEADER="**Changes planned.** Review the diff below before applying." ;;
+            *) HEADER="**Plan failed.** See the job log." ;;
+          esac
+
+          {
+            echo "<!-- terraform-plan:envs/dev -->"
+            echo "### Terraform plan — \`envs/dev\`"
+            echo
+            echo "$HEADER"
+            echo
+          } > comment.md
+
+          if [ -f plan.txt ]; then
+            SIZE=$(wc -c < plan.txt)
+            if [ "$SIZE" -gt "$LIMIT" ]; then
+              head -c "$LIMIT" plan.txt > body.txt
+              printf '\n... truncated at %s of %s bytes, full plan in the job log ...\n' \
+                "$LIMIT" "$SIZE" >> body.txt
+            else
+              cp plan.txt body.txt
+            fi
+            {
+              echo '<details><summary>Show plan</summary>'
+              echo
+              echo '```terraform'
+              cat body.txt
+              echo '```'
+              echo
+              echo '</details>'
+              echo
+            } >> comment.md
+          fi
+
+          echo "[Full log and plan artifact]($RUN_URL) · commit \`${GITHUB_SHA:0:7}\`" >> comment.md
+
+      - name: upload plan artifact
+        if: steps.plan.outputs.exitcode == '0' || steps.plan.outputs.exitcode == '2'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tfplan-dev
+          path: envs/dev/tfplan
+          retention-days: 5
+          if-no-files-found: error
+
+      - name: upload pr comment body
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: plan-comment
+          path: envs/dev/comment.md
+          retention-days: 5
+          if-no-files-found: error
+
+      - name: fail if plan errored
+        if: steps.plan.outputs.exitcode != '0' && steps.plan.outputs.exitcode != '2'
+        run: exit 1
+
+  comment:
+    name: comment plan on pr
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: plan
+    if: ${{ !cancelled() && needs.plan.result != 'skipped' }}
+
+    permissions:
+      pull-requests: write
+
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          name: plan-comment
+
+      - name: upsert sticky comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          MARKER='<!-- terraform-plan:envs/dev -->'
+
+          if [ ! -f comment.md ]; then
+            {
+              echo "$MARKER"
+              echo "### Terraform plan — \`envs/dev\`"
+              echo
+              echo "**Plan job failed before it produced a plan.** See the job log."
+              echo
+              echo "[Full log]($RUN_URL) · commit \`${GITHUB_SHA:0:7}\`"
+            } > comment.md
+          fi
+
+          ID=$(gh api "repos/${REPO}/issues/${PR}/comments" --paginate \
+                 --jq "map(select(.body | startswith(\"${MARKER}\"))) | .[0].id // empty" \
+               | head -n1)
+
+          if [ -n "$ID" ]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${ID}" -F body=@comment.md
+          else
+            gh api -X POST "repos/${REPO}/issues/${PR}/comments" -F body=@comment.md
+          fi
