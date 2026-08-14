@@ -49,3 +49,10 @@ variable "psa_cidr" {
     error_message = "psa_cidr must be a valid IPv4 CIDR with a prefix between /16 and /24."
   }
 }
+
+variable "ops_vm_name" {
+  description = "Name of the dev ops instance."
+  type        = string
+  default     = "petclinic-dev-ops"
+}
+

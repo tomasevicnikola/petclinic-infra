@@ -22,3 +22,18 @@ output "psa_range_name" {
   description = "Reserved Private Service Access range, consumed by Cloud SQL."
   value       = module.network.psa_range_name
 }
+
+output "ops_vm_name" {
+  description = "Ops instance name."
+  value       = module.ops_vm.instance_name
+}
+
+output "ops_vm_zone" {
+  description = "Ops instance zone."
+  value       = module.ops_vm.zone
+}
+
+output "ops_vm_internal_ip" {
+  description = "Ops instance internal IP."
+  value       = module.ops_vm.internal_ip
+}
