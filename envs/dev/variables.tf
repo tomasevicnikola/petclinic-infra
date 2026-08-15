@@ -104,3 +104,21 @@ variable "db_secret_prefix" {
   default     = "dev-db-app"
 }
 
+variable "env_prefix" {
+  description = "Prefix of the cross-cutting dev secrets: dev-ansible-vault-password."
+  type        = string
+  default     = "dev"
+}
+
+variable "vault_deletion_protection" {
+  description = "Deletion protection on the Ansible Vault password secret. Tearing dev down means setting this to false, applying, and then destroying."
+  type        = bool
+  default     = true
+}
+
+variable "vault_password_version" {
+  description = "Bump to rotate the dev Ansible Vault password. Re-key everything encrypted with the old one first."
+  type        = number
+  default     = 1
+}
+
