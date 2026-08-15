@@ -72,3 +72,13 @@ output "db_config_secret_id" {
   description = "Secret holding the database connection details as JSON."
   value       = module.cloudsql.config_secret_id
 }
+
+output "grafana_admin_secret_id" {
+  description = "Secret holding the Grafana admin password. The id only."
+  value       = module.secrets.grafana_admin_secret_id
+}
+
+output "ansible_vault_secret_id" {
+  description = "Secret holding the Ansible Vault password. The id only."
+  value       = module.secrets.ansible_vault_secret_id
+}

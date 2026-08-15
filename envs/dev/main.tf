@@ -51,3 +51,16 @@ module "cloudsql" {
 
   depends_on = [module.network]
 }
+
+module "secrets" {
+  source = "../../modules/secrets"
+
+  project_id = var.project_id
+  region     = var.region
+
+  secret_prefix             = var.secret_prefix
+  ops_service_account_email = local.ops_vm_service_account
+
+  grafana_password_version = var.grafana_password_version
+  vault_password_version   = var.vault_password_version
+}

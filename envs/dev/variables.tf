@@ -104,3 +104,21 @@ variable "db_secret_prefix" {
   default     = "dev-db-app"
 }
 
+variable "secret_prefix" {
+  description = "Prefix of the cross-cutting dev secrets: dev-grafana-admin-password and dev-ansible-vault-password."
+  type        = string
+  default     = "dev"
+}
+
+variable "grafana_password_version" {
+  description = "Bump to rotate the dev Grafana admin password."
+  type        = number
+  default     = 1
+}
+
+variable "vault_password_version" {
+  description = "Bump to rotate the dev Ansible Vault password. Re-key everything encrypted with the old one first."
+  type        = number
+  default     = 1
+}
+
