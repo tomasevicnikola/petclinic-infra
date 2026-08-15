@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.5"
+  required_version = ">= 1.11"
 
   required_providers {
     google = {
@@ -8,7 +8,7 @@ terraform {
     }
     random = {
       source  = "hashicorp/random"
-      version = "~> 3.6"
+      version = "~> 3.7"
     }
   }
 }
@@ -20,11 +20,7 @@ locals {
   config_secret_id   = "${var.secret_prefix}-config"
 }
 
-resource "random_password" "app" {
-  keepers = {
-    version = var.password_version
-  }
-
+ephemeral "random_password" "app" {
   length           = 32
   special          = true
   override_special = "-_.~"
@@ -34,7 +30,7 @@ resource "random_password" "app" {
   min_special      = 2
 }
 
-resource "random_password" "root" {
+ephemeral "random_password" "root" {
   length           = 32
   special          = true
   override_special = "-_.~"
@@ -49,8 +45,9 @@ resource "google_sql_database_instance" "this" {
   name    = var.instance_name
   region  = var.region
 
-  database_version = var.database_version
-  root_password    = random_password.root.result
+  database_version         = var.database_version
+  root_password_wo         = ephemeral.random_password.root.result
+  root_password_wo_version = var.password_version
 
   deletion_protection = var.deletion_protection
 
@@ -126,11 +123,12 @@ resource "google_sql_database" "this" {
 }
 
 resource "google_sql_user" "app" {
-  project  = var.project_id
-  instance = google_sql_database_instance.this.name
-  name     = var.app_user_name
-  host     = var.app_user_host
-  password = random_password.app.result
+  project             = var.project_id
+  instance            = google_sql_database_instance.this.name
+  name                = var.app_user_name
+  host                = var.app_user_host
+  password_wo         = ephemeral.random_password.app.result
+  password_wo_version = var.password_version
 }
 
 resource "google_secret_manager_secret" "app_password" {
@@ -151,8 +149,12 @@ resource "google_secret_manager_secret" "app_password" {
 }
 
 resource "google_secret_manager_secret_version" "app_password" {
-  secret      = google_secret_manager_secret.app_password.id
-  secret_data = random_password.app.result
+  secret                 = google_secret_manager_secret.app_password.id
+  secret_data_wo         = ephemeral.random_password.app.result
+  secret_data_wo_version = var.password_version
+  deletion_policy        = "DISABLE"
+
+  depends_on = [google_sql_user.app]
 
   lifecycle {
     create_before_destroy = true

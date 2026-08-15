@@ -92,7 +92,7 @@ variable "app_user_name" {
 }
 
 variable "password_version" {
-  description = "Bump to rotate the application password. One apply regenerates it, updates the MySQL user and adds a secret version."
+  description = "Bump to rotate the application and root passwords. One apply regenerates them, updates the MySQL users and adds a secret version."
   type        = number
   default     = 1
 
