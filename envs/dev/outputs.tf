@@ -37,3 +37,38 @@ output "ops_vm_internal_ip" {
   description = "Ops instance internal IP."
   value       = module.ops_vm.internal_ip
 }
+
+output "db_instance_name" {
+  description = "Cloud SQL instance name."
+  value       = module.cloudsql.instance_name
+}
+
+output "db_connection_name" {
+  description = "Cloud SQL connection name, project:region:instance."
+  value       = module.cloudsql.connection_name
+}
+
+output "db_private_ip" {
+  description = "Private IP of the database, for the instance template and Ansible."
+  value       = module.cloudsql.private_ip_address
+}
+
+output "db_name" {
+  description = "Application database name."
+  value       = module.cloudsql.database_name
+}
+
+output "db_app_user" {
+  description = "MySQL user the application connects as."
+  value       = module.cloudsql.app_user_name
+}
+
+output "db_password_secret_id" {
+  description = "Secret holding the application user's password. The id only."
+  value       = module.cloudsql.password_secret_id
+}
+
+output "db_config_secret_id" {
+  description = "Secret holding the database connection details as JSON."
+  value       = module.cloudsql.config_secret_id
+}

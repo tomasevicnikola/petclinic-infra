@@ -56,3 +56,51 @@ variable "ops_vm_name" {
   default     = "petclinic-dev-ops"
 }
 
+variable "db_instance_name" {
+  description = "Name of the dev Cloud SQL instance. Cloud SQL holds a deleted name for about a week, so recreating needs a new one."
+  type        = string
+  default     = "petclinic-dev-mysql"
+}
+
+variable "db_name" {
+  description = "Application database on the dev instance."
+  type        = string
+  default     = "petclinic"
+}
+
+variable "db_app_user" {
+  description = "MySQL user the application connects as in dev."
+  type        = string
+  default     = "petclinic"
+}
+
+variable "db_password_version" {
+  description = "Bump to rotate the dev database password. The MySQL user and the secret change together in one apply."
+  type        = number
+  default     = 1
+}
+
+variable "db_tier" {
+  description = "Machine tier of the dev instance."
+  type        = string
+  default     = "db-g1-small"
+}
+
+variable "db_availability_type" {
+  description = "ZONAL in dev. Prod would be REGIONAL."
+  type        = string
+  default     = "ZONAL"
+}
+
+variable "db_deletion_protection" {
+  description = "Deletion protection on the dev database, in Terraform and in the API. Tearing dev down means setting this to false, applying, and then destroying."
+  type        = bool
+  default     = true
+}
+
+variable "db_secret_prefix" {
+  description = "Prefix of the dev database secrets: dev-db-app-password and dev-db-app-config."
+  type        = string
+  default     = "dev-db-app"
+}
+
