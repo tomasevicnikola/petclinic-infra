@@ -6,7 +6,7 @@ terraform {
   required_providers {
     google = {
       source = "hashicorp/google"
-      # secret_data_wo arrived in 6.14.
+      # secret_data_wo arrived in 6.23.
       version = "~> 7.0"
     }
     random = {

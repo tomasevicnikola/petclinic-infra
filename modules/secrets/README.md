@@ -30,5 +30,5 @@ to write a new version. A new password is generated on every run and thrown
 away; only a bump of `grafana_password_version` or `vault_password_version`
 rotates anything.
 
-This needs Terraform >= 1.11, google >= 6.14 and random >= 3.7, which is why
+This needs Terraform >= 1.11, google >= 6.23 and random >= 3.7, which is why
 this module asks for a higher version floor than the others.

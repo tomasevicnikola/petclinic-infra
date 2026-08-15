@@ -41,7 +41,7 @@ They use `ephemeral` `random_password` with the write-only `secret_data_wo`
 argument: the value is generated in memory during the run and handed to the
 provider on apply, and Terraform stores nothing but the counter
 `secret_data_wo_version`, which is what decides when a new secret version is
-written. Terraform 1.11, google 6.14 and random 3.7 are the floors for this,
+written. Terraform 1.11, google 6.23 and random 3.7 are the floors for this,
 and the repo is above all three.
 
 The database password in `modules/cloudsql` is still on the classic path and is
