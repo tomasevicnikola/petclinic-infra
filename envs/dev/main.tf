@@ -13,6 +13,7 @@ module "network" {
   subnet_name  = var.subnet_name
   subnet_cidr  = var.subnet_cidr
   psa_cidr     = var.psa_cidr
+  app_port     = var.app_port
 }
 
 module "ops_vm" {
@@ -50,6 +51,27 @@ module "cloudsql" {
   app_service_account_email = local.app_vm_service_account
 
   depends_on = [module.network]
+}
+
+module "compute_mig" {
+  source = "../../modules/compute-mig"
+
+  project_id = var.project_id
+  region     = var.region
+
+  name_prefix           = var.app_name_prefix
+  subnet_id             = module.network.subnet_id
+  service_account_email = local.app_vm_service_account
+
+  network_tags = [module.network.tags.ssh_iap, module.network.tags.app]
+  app_port     = var.app_port
+
+  machine_type = var.app_machine_type
+  min_replicas = var.app_min_replicas
+  max_replicas = var.app_max_replicas
+  cpu_target   = var.app_cpu_target
+
+  enable_autohealing = var.app_enable_autohealing
 }
 
 module "secrets" {

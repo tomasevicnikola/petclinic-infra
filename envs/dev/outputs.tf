@@ -77,3 +77,23 @@ output "ansible_vault_secret_id" {
   description = "Secret holding the Ansible Vault password. The id only."
   value       = module.secrets.ansible_vault_secret_id
 }
+
+output "app_instance_group" {
+  description = "Managed instance group self link, for the load balancer backend service."
+  value       = module.compute_mig.instance_group
+}
+
+output "app_instance_group_manager_name" {
+  description = "Group manager name, for gcloud and Ansible inventory."
+  value       = module.compute_mig.instance_group_manager_name
+}
+
+output "app_health_check_self_link" {
+  description = "Health check self link, reused by the load balancer."
+  value       = module.compute_mig.health_check_self_link
+}
+
+output "app_named_port" {
+  description = "Named port the load balancer backend must reference."
+  value       = module.compute_mig.named_port
+}
