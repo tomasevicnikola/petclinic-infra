@@ -104,6 +104,48 @@ variable "db_secret_prefix" {
   default     = "dev-db-app"
 }
 
+variable "app_port" {
+  description = "Port the application listens on. One value for the whole environment: the firewall opens it to health checkers and the group publishes it as its named port, so they cannot drift apart."
+  type        = number
+  default     = 8080
+}
+
+variable "app_name_prefix" {
+  description = "Prefix for the application group, its template, health check and autoscaler."
+  type        = string
+  default     = "petclinic-dev-app"
+}
+
+variable "app_machine_type" {
+  description = "Machine type of the application instances."
+  type        = string
+  default     = "e2-small"
+}
+
+variable "app_min_replicas" {
+  description = "Smallest the dev group scales to."
+  type        = number
+  default     = 2
+}
+
+variable "app_max_replicas" {
+  description = "Largest the dev group scales to, and the cost stop."
+  type        = number
+  default     = 4
+}
+
+variable "app_cpu_target" {
+  description = "Average CPU the autoscaler holds across the dev group."
+  type        = number
+  default     = 0.6
+}
+
+variable "app_enable_autohealing" {
+  description = "Autohealing on the dev group. False until the deploy pipeline puts the application on the instances; a health check against an empty instance would recreate it forever."
+  type        = bool
+  default     = false
+}
+
 variable "env_prefix" {
   description = "Prefix of the cross-cutting dev secrets: dev-ansible-vault-password."
   type        = string
