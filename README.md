@@ -30,3 +30,13 @@ Defaults to project `petclinic-capstone` in `europe-west3`; override with
 `PROJECT_ID`, `REGION`, `GITHUB_OWNER`. Re-running is safe. On success it
 prints the provider resource name and service account emails the workflows
 need.
+
+## Who can reach the load balancer
+
+The load balancer denies every source except the ranges Cloud Armor allows, and
+that list is the one value the pipeline does not read from the code. It comes
+from the `LB_ALLOWED_SOURCE_RANGES` repository variable, passed to the plan
+steps as `TF_VAR_lb_allowed_source_ranges`, so changing who can reach the
+application is an edit in Settings followed by an apply rather than a commit.
+
+
