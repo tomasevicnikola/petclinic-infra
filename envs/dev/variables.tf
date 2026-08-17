@@ -110,10 +110,10 @@ variable "lb_name_prefix" {
   default     = "petclinic-dev-lb"
 }
 
-variable "lb_allowed_source_ranges" {
-  description = "Source CIDRs Cloud Armor lets through to the dev load balancer. The default is a documentation range, so an apply that forgets to set this denies everyone rather than exposing the app."
+variable "lb_allowed_members" {
+  description = "Identities IAP admits to the dev load balancer. The default names nobody, so an apply that forgets to set this locks everyone out rather than exposing the app."
   type        = list(string)
-  default     = ["203.0.113.7/32"]
+  default     = ["user:nobody@example.com"]
 }
 
 variable "lb_domain" {
