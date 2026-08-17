@@ -179,7 +179,7 @@ jobs:
         id: plan
         working-directory: envs/dev
         env:
-          TF_VAR_lb_allowed_source_ranges: ${{ vars.LB_ALLOWED_SOURCE_RANGES || '["203.0.113.7/32"]' }}
+          TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS || '["user:nobody@example.com"]' }}
         run: |
           set +e
           terraform plan -no-color -lock-timeout=5m -detailed-exitcode -out=tfplan

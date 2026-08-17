@@ -33,10 +33,13 @@ need.
 
 ## Who can reach the load balancer
 
-The load balancer denies every source except the ranges Cloud Armor allows, and
-that list is the one value the pipeline does not read from the code. It comes
-from the `LB_ALLOWED_SOURCE_RANGES` repository variable, passed to the plan
-steps as `TF_VAR_lb_allowed_source_ranges`, so changing who can reach the
-application is an edit in Settings followed by an apply rather than a commit.
+The load balancer sits behind Identity-Aware Proxy, so reaching it means signing
+in with an account that has been granted access rather than arriving from an
+allowed address. That list of identities is the one value the pipeline does not
+read from the code. It comes from the `LB_ALLOWED_MEMBERS` repository variable,
+passed to the plan steps as `TF_VAR_lb_allowed_members`, so changing who can
+reach the application is an edit in Settings followed by an apply rather than a
+commit. IAP also needs an OAuth consent screen, configured once by hand in the
+console — a prerequisite Terraform cannot create for itself.
 
 

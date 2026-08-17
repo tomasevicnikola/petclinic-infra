@@ -84,8 +84,8 @@ module "load_balancer" {
   health_check_self_link = module.compute_mig.health_check_self_link
   port_name              = module.compute_mig.named_port
 
-  allowed_source_ranges = var.lb_allowed_source_ranges
-  domain                = var.lb_domain
+  allowed_members = var.lb_allowed_members
+  domain          = var.lb_domain
 }
 
 module "secrets" {

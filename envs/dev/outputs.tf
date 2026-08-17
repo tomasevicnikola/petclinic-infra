@@ -108,11 +108,6 @@ output "lb_url" {
   value       = module.load_balancer.url
 }
 
-output "lb_security_policy_name" {
-  description = "Cloud Armor policy name, for reading denied requests in the logs."
-  value       = module.load_balancer.security_policy_name
-}
-
 output "lb_backend_service_name" {
   description = "Backend service name, for checking backend health."
   value       = module.load_balancer.backend_service_name
