@@ -13,11 +13,6 @@ output "sslip_host" {
   value       = local.sslip_host
 }
 
-output "security_policy_name" {
-  description = "Cloud Armor policy name, for gcloud and for reading denied requests in the logs."
-  value       = google_compute_security_policy.this.name
-}
-
 output "backend_service_name" {
   description = "Backend service name, for checking backend health."
   value       = google_compute_backend_service.this.name

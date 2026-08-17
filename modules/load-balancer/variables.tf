@@ -13,23 +13,23 @@ variable "name_prefix" {
   }
 }
 
-variable "allowed_source_ranges" {
-  description = "Source CIDRs Cloud Armor lets through. Everything else gets 403 at the edge, which is what keeps a public load balancer off the public Internet. No default on purpose."
+variable "allowed_members" {
+  description = "Identities IAP admits, as IAM member strings. Everyone else is turned away at the edge before a request reaches a backend, which is what keeps a public load balancer off the public Internet. No default on purpose."
   type        = list(string)
 
   validation {
-    condition     = length(var.allowed_source_ranges) > 0
-    error_message = "allowed_source_ranges must list at least one CIDR; an empty list would deny everything including you."
+    condition     = length(var.allowed_members) > 0
+    error_message = "allowed_members must list at least one identity; an empty list would lock everyone out including you."
   }
 
   validation {
-    condition     = !contains(var.allowed_source_ranges, "0.0.0.0/0") && !contains(var.allowed_source_ranges, "::/0")
-    error_message = "allowed_source_ranges must not contain 0.0.0.0/0 or ::/0, which would defeat the policy."
+    condition     = !contains(var.allowed_members, "allUsers") && !contains(var.allowed_members, "allAuthenticatedUsers")
+    error_message = "allowed_members must not contain allUsers or allAuthenticatedUsers, which would defeat the point."
   }
 
   validation {
-    condition     = alltrue([for c in var.allowed_source_ranges : can(cidrhost(c, 0))])
-    error_message = "every entry must be a valid CIDR, for example 203.0.113.7/32."
+    condition     = alltrue([for m in var.allowed_members : can(regex("^(user|group|serviceAccount|domain):", m))])
+    error_message = "every entry must be an IAM member string, for example user:someone@example.com."
   }
 }
 

@@ -29,45 +29,6 @@ resource "google_compute_global_address" "this" {
   ip_version   = "IPV4"
 }
 
-resource "google_compute_security_policy" "this" {
-  project     = var.project_id
-  name        = "${var.name_prefix}-armor"
-  type        = "CLOUD_ARMOR"
-  description = "Default deny at the edge; only the listed source ranges reach the backend."
-
-  rule {
-    action      = "allow"
-    priority    = 1000
-    description = "Allowed source ranges."
-
-    match {
-      versioned_expr = "SRC_IPS_V1"
-
-      config {
-        src_ip_ranges = var.allowed_source_ranges
-      }
-    }
-  }
-
-  rule {
-    action      = "deny(403)"
-    priority    = 2147483647
-    description = "Default deny."
-
-    match {
-      versioned_expr = "SRC_IPS_V1"
-
-      config {
-        src_ip_ranges = ["*"]
-      }
-    }
-  }
-
-  advanced_options_config {
-    log_level = "VERBOSE"
-  }
-}
-
 resource "google_compute_backend_service" "this" {
   project     = var.project_id
   name        = "${var.name_prefix}-backend"
@@ -78,8 +39,11 @@ resource "google_compute_backend_service" "this" {
   load_balancing_scheme = "EXTERNAL_MANAGED"
   timeout_sec           = var.backend_timeout_sec
 
-  health_checks   = [var.health_check_self_link]
-  security_policy = google_compute_security_policy.this.id
+  health_checks = [var.health_check_self_link]
+
+  iap {
+    enabled = true
+  }
 
   backend {
     group           = var.instance_group
@@ -92,6 +56,15 @@ resource "google_compute_backend_service" "this" {
     enable      = true
     sample_rate = var.log_sample_rate
   }
+}
+
+resource "google_iap_web_backend_service_iam_member" "this" {
+  for_each = toset(var.allowed_members)
+
+  project             = var.project_id
+  web_backend_service = google_compute_backend_service.this.name
+  role                = "roles/iap.httpsResourceAccessor"
+  member              = each.value
 }
 
 resource "google_compute_url_map" "this" {
