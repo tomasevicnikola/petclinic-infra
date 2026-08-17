@@ -74,6 +74,20 @@ module "compute_mig" {
   enable_autohealing = var.app_enable_autohealing
 }
 
+module "load_balancer" {
+  source = "../../modules/load-balancer"
+
+  project_id  = var.project_id
+  name_prefix = var.lb_name_prefix
+
+  instance_group         = module.compute_mig.instance_group
+  health_check_self_link = module.compute_mig.health_check_self_link
+  port_name              = module.compute_mig.named_port
+
+  allowed_source_ranges = var.lb_allowed_source_ranges
+  domain                = var.lb_domain
+}
+
 module "secrets" {
   source = "../../modules/secrets"
 

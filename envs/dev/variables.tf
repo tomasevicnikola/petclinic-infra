@@ -104,6 +104,24 @@ variable "db_secret_prefix" {
   default     = "dev-db-app"
 }
 
+variable "lb_name_prefix" {
+  description = "Prefix for the load balancer, its IP, policy, proxies and forwarding rules."
+  type        = string
+  default     = "petclinic-dev-lb"
+}
+
+variable "lb_allowed_source_ranges" {
+  description = "Source CIDRs Cloud Armor lets through to the dev load balancer. The default is a documentation range, so an apply that forgets to set this denies everyone rather than exposing the app."
+  type        = list(string)
+  default     = ["203.0.113.7/32"]
+}
+
+variable "lb_domain" {
+  description = "Domain for a managed certificate. Null while no domain exists, which makes the module issue a self-signed one."
+  type        = string
+  default     = null
+}
+
 variable "app_port" {
   description = "Port the application listens on. One value for the whole environment: the firewall opens it to health checkers and the group publishes it as its named port, so they cannot drift apart."
   type        = number
