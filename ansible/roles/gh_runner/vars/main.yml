@@ -1,0 +1,2 @@
+---
+gh_runner_tarball: "/usr/local/src/actions-runner-{{ gh_runner_arch }}-{{ gh_runner_version }}.tar.gz"

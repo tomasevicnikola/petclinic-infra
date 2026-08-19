@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Managed by Ansible (roles/app_deploy). Edits here are overwritten.
+set -euo pipefail
+
+readonly CONTAINER={{ app_deploy_container_name | quote }}
+readonly IMAGE={{ app_deploy_image | quote }}
+readonly PORT={{ app_deploy_port }}
+readonly CONTAINER_PORT={{ app_deploy_container_port }}
+readonly GCLOUD={{ app_deploy_gcloud_bin | quote }}
+readonly PROJECT={{ app_deploy_project | quote }}
+
+if [ ! -x "${GCLOUD}" ]; then
+  echo "${GCLOUD} not found - the Google Cloud CLI snap is missing on this instance" >&2
+  exit 1
+fi
+
+bind_ip="$(curl -sf -H 'Metadata-Flavor: Google' \
+  http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip)"
+if [ -z "${bind_ip}" ]; then
+  echo "could not read the internal IP from the metadata server" >&2
+  exit 1
+fi
+
+render_env() {
+{% if app_deploy_fetch_db_config | bool %}
+  local config
+  config="$("${GCLOUD}" secrets versions access latest \
+    --secret={{ app_deploy_db_config_secret | quote }} --project="${PROJECT}")"
+
+  local host port database username
+  host="$(printf '%s' "${config}" | jq -er .host)"
+  port="$(printf '%s' "${config}" | jq -er .port)"
+  database="$(printf '%s' "${config}" | jq -er .database)"
+  username="$(printf '%s' "${config}" | jq -er .username)"
+
+  printf 'SPRING_PROFILES_ACTIVE=%s\n' {{ app_deploy_spring_profile | quote }}
+  printf 'SPRING_DATASOURCE_URL=jdbc:mysql://%s:%s/%s\n' "${host}" "${port}" "${database}"
+  printf 'SPRING_DATASOURCE_USERNAME=%s\n' "${username}"
+{% endif %}
+{% if app_deploy_fetch_db_password | bool %}
+  local password
+  password="$("${GCLOUD}" secrets versions access latest \
+    --secret={{ app_deploy_db_password_secret | quote }} --project="${PROJECT}")"
+  printf 'SPRING_DATASOURCE_PASSWORD=%s\n' "${password}"
+{% else %}
+  :
+{% endif %}
+{% for key, value in app_deploy_env.items() %}
+  printf '%s=%s\n' {{ key | quote }} {{ value | string | quote }}
+{% endfor %}
+  return 0
+}
+
+docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
+
+render_env | docker run \
+  --rm \
+  --name "${CONTAINER}" \
+  --env-file /dev/stdin \
+  --publish "${bind_ip}:${PORT}:${CONTAINER_PORT}" \
+  --log-driver json-file \
+{% if app_deploy_placeholder | bool %}
+  --volume {{ app_deploy_placeholder_root | quote }}:/usr/share/nginx/html:ro \
+{% endif %}
+  --security-opt no-new-privileges \
+  "${IMAGE}"

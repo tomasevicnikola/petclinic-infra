@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: node_exporter
+  author: tomasevicnikola
+  description: Prometheus node exporter as a hardened systemd unit on the internal IP.
+  company: petclinic capstone
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []

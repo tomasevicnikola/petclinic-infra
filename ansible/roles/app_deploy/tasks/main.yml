@@ -1,0 +1,113 @@
+---
+- name: Require the inventory facts this role depends on
+  ansible.builtin.assert:
+    that:
+      - internal_ip is defined
+      - gcp_project is defined
+    fail_msg: >-
+      internal_ip and gcp_project are supplied by the gcp_compute inventory.
+      Running against a static inventory means setting both per host.
+
+- name: Create root's docker configuration directory
+  ansible.builtin.file:
+    path: /root/.docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+
+- name: Configure the Artifact Registry credential helper for root
+  ansible.builtin.copy:
+    content: "{{ {'credHelpers': {app_deploy_registry: 'gcloud'}} | to_nice_json }}\n"
+    dest: /root/.docker/config.json
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+
+- name: Create the application state directory
+  ansible.builtin.file:
+    path: "{{ app_deploy_state_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Create the placeholder document tree
+  ansible.builtin.file:
+    path: "{{ app_deploy_placeholder_root }}/actuator"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: app_deploy_placeholder | bool
+
+- name: Write the placeholder health response
+  ansible.builtin.copy:
+    content: |
+      {"status":"UP","placeholder":true}
+    dest: "{{ app_deploy_placeholder_root }}/actuator/health"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: app_deploy_placeholder | bool
+  notify: Restart the application
+
+- name: Write the placeholder index page
+  ansible.builtin.copy:
+    content: |
+      <!doctype html>
+      <title>petclinic placeholder</title>
+      <h1>Placeholder</h1>
+      <p>Infrastructure is up. The application image has not been deployed yet.</p>
+      <p>Served from {{ inventory_hostname }}.</p>
+    dest: "{{ app_deploy_placeholder_root }}/index.html"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: app_deploy_placeholder | bool
+  notify: Restart the application
+
+- name: Install the container run script
+  ansible.builtin.template:
+    src: petclinic-app-run.sh.j2
+    dest: "{{ app_deploy_run_script }}"
+    owner: root
+    group: root
+    mode: "0755"
+    validate: bash -n %s
+  become: true
+  notify: Restart the application
+
+- name: Install the application unit
+  ansible.builtin.template:
+    src: petclinic-app.service.j2
+    dest: "/etc/systemd/system/{{ app_deploy_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart the application
+
+- name: Enable the application
+  ansible.builtin.systemd_service:
+    name: "{{ app_deploy_service_name }}"
+    state: started
+    enabled: true
+    daemon_reload: true
+  become: true
+
+- name: Wait for the application to answer the load balancer's health check
+  ansible.builtin.uri:
+    url: http://{{ internal_ip }}:{{ app_deploy_port }}/actuator/health
+    status_code: 200
+  register: app_deploy_health
+  retries: 12
+  delay: 5
+  until: app_deploy_health is succeeded
+  changed_when: false

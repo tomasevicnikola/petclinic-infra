@@ -1,0 +1,126 @@
+---
+- name: Require a runner URL
+  ansible.builtin.assert:
+    that:
+      - gh_runner_url | length > 0
+    fail_msg: gh_runner_url must be set (see inventories/dev/group_vars/ops.yml).
+
+- name: Install the runner's runtime dependencies
+  ansible.builtin.apt:
+    name: "{{ gh_runner_dependencies }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Create the runner group
+  ansible.builtin.group:
+    name: "{{ gh_runner_group }}"
+    state: present
+  become: true
+
+- name: Create the runner user
+  ansible.builtin.user:
+    name: "{{ gh_runner_user }}"
+    group: "{{ gh_runner_group }}"
+    shell: /bin/bash
+    home: "/home/{{ gh_runner_user }}"
+    create_home: true
+    password_lock: true
+    state: present
+  become: true
+
+- name: Create the runner directory
+  ansible.builtin.file:
+    path: "{{ gh_runner_dir }}"
+    state: directory
+    owner: "{{ gh_runner_user }}"
+    group: "{{ gh_runner_group }}"
+    mode: "0750"
+  become: true
+
+- name: Look for an existing runner registration
+  ansible.builtin.stat:
+    path: "{{ gh_runner_dir }}/.runner"
+  register: gh_runner_registration
+  become: true
+
+- name: Register the runner
+  when: not gh_runner_registration.stat.exists
+  become: true
+  block:
+    - name: Require a registration token for a first-time registration
+      ansible.builtin.assert:
+        that:
+          - gh_runner_token | length > 0
+        fail_msg: >-
+          No runner is registered on this host and gh_runner_token was not
+          given. Fetch a registration token from GitHub -> Settings -> Actions
+          -> Runners -> New self-hosted runner and re-run with
+          -e gh_runner_token=...
+
+    - name: Download the runner
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/actions/runner/releases/download/v{{ gh_runner_version }}/actions-runner-{{ gh_runner_arch }}-{{ gh_runner_version }}.tar.gz
+        dest: "{{ gh_runner_tarball }}"
+        checksum: "{{ gh_runner_checksum }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Unpack the runner
+      ansible.builtin.unarchive:
+        src: "{{ gh_runner_tarball }}"
+        dest: "{{ gh_runner_dir }}"
+        remote_src: true
+        owner: "{{ gh_runner_user }}"
+        group: "{{ gh_runner_group }}"
+        creates: "{{ gh_runner_dir }}/config.sh"
+
+    - name: Register the runner with GitHub
+      ansible.builtin.command:
+        cmd: >-
+          ./config.sh
+          --url {{ gh_runner_url }}
+          --token {{ gh_runner_token }}
+          --name {{ gh_runner_name }}
+          --labels {{ gh_runner_labels }}
+          --work {{ gh_runner_work_dir }}
+          --unattended
+          {{ '--disableupdate' if gh_runner_disable_update else '' }}
+          {{ '--replace' if gh_runner_replace else '' }}
+          {{ '--ephemeral' if gh_runner_ephemeral else '' }}
+        chdir: "{{ gh_runner_dir }}"
+        creates: "{{ gh_runner_dir }}/.runner"
+      become: true
+      become_user: "{{ gh_runner_user }}"
+      no_log: true
+
+- name: Look for an installed runner service
+  ansible.builtin.stat:
+    path: "{{ gh_runner_dir }}/.service"
+  register: gh_runner_service_file
+  become: true
+
+- name: Install the runner as a systemd service
+  ansible.builtin.command:
+    cmd: ./svc.sh install {{ gh_runner_user }}
+    chdir: "{{ gh_runner_dir }}"
+    creates: "{{ gh_runner_dir }}/.service"
+  become: true
+  when: not gh_runner_service_file.stat.exists
+
+- name: Read the runner service name
+  ansible.builtin.slurp:
+    src: "{{ gh_runner_dir }}/.service"
+  register: gh_runner_service_name
+  become: true
+
+- name: Enable the runner service
+  ansible.builtin.systemd_service:
+    name: "{{ gh_runner_service_name.content | b64decode | trim }}"
+    state: started
+    enabled: true
+    daemon_reload: true
+  become: true

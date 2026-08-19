@@ -1,0 +1,41 @@
+[Unit]
+# Managed by Ansible (roles/node_exporter). Edits here are overwritten.
+Description=Prometheus node exporter
+Documentation=https://github.com/prometheus/node_exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ node_exporter_user }}
+Group={{ node_exporter_group }}
+ExecStart={{ node_exporter_bin }} \
+  --web.listen-address={{ node_exporter_listen_address }}:{{ node_exporter_port }} \
+  --collector.disable-defaults \
+{% for collector in node_exporter_collectors %}
+  --collector.{{ collector }}{{ " \\" if not loop.last else "" }}
+{% endfor %}
+Restart=on-failure
+RestartSec=5s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

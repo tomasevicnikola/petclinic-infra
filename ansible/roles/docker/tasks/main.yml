@@ -1,0 +1,100 @@
+---
+- name: Create the apt keyring directory
+  ansible.builtin.file:
+    path: "{{ docker_apt_keyring | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Fetch Docker's apt signing key
+  ansible.builtin.get_url:
+    url: "{{ docker_apt_key_url }}"
+    dest: "{{ docker_apt_keyring }}"
+    checksum: "sha256:{{ docker_apt_key_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Read the fingerprint of the fetched key
+  ansible.builtin.command:
+    cmd: gpg --show-keys --with-colons {{ docker_apt_keyring }}
+  register: docker_key_info
+  changed_when: false
+  become: true
+
+- name: Fail unless the key is Docker's published signing key
+  ansible.builtin.assert:
+    that:
+      - docker_apt_key_fingerprint in docker_key_info.stdout
+    fail_msg: >-
+      {{ docker_apt_keyring }} is not the key documented at
+      https://docs.docker.com/engine/install/ubuntu/. Refusing to trust the
+      repository. Expected fingerprint {{ docker_apt_key_fingerprint }}.
+    success_msg: Docker signing key matches {{ docker_apt_key_fingerprint }}.
+
+- name: Add the Docker apt repository
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: [deb]
+    uris: "{{ docker_apt_repo_uri }}"
+    suites: ["{{ ansible_facts['distribution_release'] }}"]
+    components: ["{{ docker_apt_repo_component }}"]
+    architectures: ["{{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else 'arm64' }}"]
+    signed_by: "{{ docker_apt_keyring }}"
+    enabled: true
+    state: present
+  become: true
+  register: docker_repo
+
+- name: Install Docker Engine and the compose plugin
+  ansible.builtin.apt:
+    name:
+      - "docker-ce={{ docker_version }}"
+      - "docker-ce-cli={{ docker_version }}"
+      - "containerd.io={{ docker_containerd_version }}"
+      - "docker-buildx-plugin={{ docker_buildx_version }}"
+      - "docker-compose-plugin={{ docker_compose_version }}"
+    state: present
+    update_cache: "{{ docker_repo.changed }}"
+  become: true
+
+- name: Hold the Docker packages at the pinned versions
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - docker-ce
+    - docker-ce-cli
+    - containerd.io
+    - docker-buildx-plugin
+    - docker-compose-plugin
+  become: true
+
+- name: Configure the Docker daemon
+  ansible.builtin.template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+    validate: dockerd --validate --config-file=%s
+  become: true
+  notify: Restart docker
+
+- name: Enable Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    state: started
+    enabled: true
+  become: true
+
+- name: Grant Docker socket access
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: true
+  loop: "{{ docker_group_members }}"
+  become: true
