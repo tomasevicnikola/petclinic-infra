@@ -5,6 +5,7 @@ on:
     paths:
       - "envs/**"
       - "modules/**"
+      - "ansible/**"
       - ".tflint.hcl"
       - "trivy.yaml"
       - ".github/workflows/**"
@@ -22,6 +23,8 @@ env:
   ACTIONLINT_SHA256: "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
   TRIVY_VERSION: "0.73.0"
   TRIVY_SHA256: "2edd39da482bb4e9831962487b68f68e3928ec3137794757f54d00383d79547b"
+  ANSIBLE_CORE_VERSION: "2.21.1"
+  ANSIBLE_LINT_VERSION: "26.4.0"
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform.d/plugin-cache
@@ -135,6 +138,60 @@ jobs:
           tar xzf trivy.tar.gz trivy
           ./trivy config .
 
+  # Static analysis of the Ansible tree, on a GitHub-hosted runner. It reads
+  # files and nothing else - no GCP credentials, no VPC, no inventory.
+  #
+  # There is deliberately no ansible-playbook job here. Running configuration
+  # management from CI means reaching the VMs, which have no public IPs, which
+  # means the self-hosted runner on the ops VM. That belongs with the deploy
+  # phase, together with the decision about which triggers may target that
+  # runner - and while these repos are public, a pull_request trigger never may
+  # (see docs/RUNNER.md).
+  ansible-lint:
+    name: ansible-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      # Cheap, and the one mistake in this tree that would actually leak
+      # something: committing the vault file after decrypting it locally.
+      - name: refuse a decrypted vault file
+        run: |
+          FILE=ansible/inventories/dev/group_vars/all/vault.yml
+          if [ ! -f "$FILE" ]; then
+            echo "::error::${FILE} is missing from the checkout"
+            exit 1
+          fi
+          # shellcheck disable=SC2016  # $ANSIBLE_VAULT is a literal file header
+          if ! head -n1 "$FILE" | grep -q '^\$ANSIBLE_VAULT'; then
+            echo "::error file=${FILE}::not encrypted - re-encrypt with ansible-vault before committing"
+            exit 1
+          fi
+
+      - name: install ansible-lint
+        run: |
+          python3 -m venv .venv
+          ./.venv/bin/pip install --quiet --disable-pip-version-check \
+            "ansible-core==${ANSIBLE_CORE_VERSION}" \
+            "ansible-lint==${ANSIBLE_LINT_VERSION}"
+
+      # ansible-lint syntax-checks through ansible-playbook, which loads the
+      # inventory from ansible.cfg - the GCE dynamic one, which this job has no
+      # credentials for and must not have. /dev/null overrides it with a source
+      # that parses to nothing, so the syntax check never reaches for the API.
+      # ansible/README.md explains why 'localhost,' does not work here: it
+      # silently resolves to the ansible/ directory and loads gcp.yml.
+      - name: ansible-lint
+        working-directory: ansible
+        env:
+          ANSIBLE_INVENTORY: /dev/null
+        run: ../.venv/bin/ansible-lint --offline
+
   plan:
     name: plan
     runs-on: ubuntu-latest
@@ -179,7 +236,7 @@ jobs:
         id: plan
         working-directory: envs/dev
         env:
-          TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS || '["user:nobody@example.com"]' }}
+          TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS }}
         run: |
           set +e
           terraform plan -no-color -lock-timeout=5m -detailed-exitcode -out=tfplan
