@@ -1,0 +1,9 @@
+---
+profile: production
+
+exclude_paths:
+  - .venv/
+  - .ansible/
+  # An encrypted blob; ansible-lint does not read vault_password_file. That it
+  # stays encrypted is checked in the workflow instead.
+  - inventories/dev/group_vars/all/vault.yml

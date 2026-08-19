@@ -1,0 +1,7 @@
+---
+gh_runner_url: https://github.com/tomasevicnikola/petclinic-infra
+gh_runner_name: "{{ inventory_hostname }}"
+
+gh_runner_labels: self-hosted,gcp,ops
+
+node_exporter_listen_address: "{{ internal_ip }}"

@@ -1,0 +1,15 @@
+// Managed by Ansible (roles/common). Edits here are overwritten.
+
+Unattended-Upgrade::Allowed-Origins {
+{% for origin in common_unattended_origins %}
+        "{{ origin }}";
+{% endfor %}
+};
+
+Unattended-Upgrade::Automatic-Reboot "{{ common_unattended_reboot | ternary('true', 'false') }}";
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+Unattended-Upgrade::Mail "";
+
+Unattended-Upgrade::IgnoreAptHoldPackages "true";

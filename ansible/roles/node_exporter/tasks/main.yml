@@ -1,0 +1,77 @@
+---
+- name: Create the node_exporter system group
+  ansible.builtin.group:
+    name: "{{ node_exporter_group }}"
+    system: true
+    state: present
+  become: true
+
+- name: Create the node_exporter system user
+  ansible.builtin.user:
+    name: "{{ node_exporter_user }}"
+    group: "{{ node_exporter_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+    create_home: false
+    password_lock: true
+    state: present
+  become: true
+
+- name: Create the versioned install directory
+  ansible.builtin.file:
+    path: "{{ node_exporter_release_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Download node_exporter
+  ansible.builtin.get_url:
+    url: "{{ node_exporter_download_url }}"
+    dest: "{{ node_exporter_tarball }}"
+    checksum: "{{ node_exporter_checksum }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Unpack node_exporter
+  ansible.builtin.unarchive:
+    src: "{{ node_exporter_tarball }}"
+    dest: "{{ node_exporter_release_dir }}"
+    remote_src: true
+    extra_opts:
+      - --strip-components=1
+    owner: root
+    group: root
+    creates: "{{ node_exporter_release_dir }}/node_exporter"
+  become: true
+
+- name: Link the pinned node_exporter into place
+  ansible.builtin.file:
+    src: "{{ node_exporter_release_dir }}/node_exporter"
+    dest: "{{ node_exporter_bin }}"
+    state: link
+    force: true
+  become: true
+  notify: Restart node_exporter
+
+- name: Install the node_exporter unit
+  ansible.builtin.template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart node_exporter
+
+- name: Enable node_exporter
+  ansible.builtin.systemd_service:
+    name: node_exporter
+    state: started
+    enabled: true
+    daemon_reload: true
+  become: true

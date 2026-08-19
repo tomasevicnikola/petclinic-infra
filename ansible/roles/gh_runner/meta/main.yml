@@ -1,0 +1,14 @@
+---
+galaxy_info:
+  role_name: gh_runner
+  author: tomasevicnikola
+  description: Self-hosted GitHub Actions runner on the ops VM, pinned and registered unattended.
+  company: petclinic capstone
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []

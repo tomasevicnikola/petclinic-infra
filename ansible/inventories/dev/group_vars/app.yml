@@ -1,0 +1,7 @@
+---
+app_deploy_port: 8080
+
+app_deploy_db_config_secret: dev-db-app-config
+app_deploy_db_password_secret: dev-db-app-password
+
+node_exporter_listen_address: "{{ internal_ip }}"

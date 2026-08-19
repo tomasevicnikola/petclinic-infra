@@ -1,0 +1,6 @@
+---
+- name: Ops VM
+  ansible.builtin.import_playbook: ops.yml
+
+- name: Application instances
+  ansible.builtin.import_playbook: app.yml

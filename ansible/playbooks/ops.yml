@@ -1,0 +1,21 @@
+---
+- name: Configure the ops VM
+  hosts: ops
+  gather_facts: true
+
+  pre_tasks:
+    - name: Confirm the vault chain decrypted
+      ansible.builtin.assert:
+        that:
+          - vault_smoke_test == "encrypted-ok"
+        fail_msg: >-
+          group_vars/all/vault.yml decrypted but does not contain the expected
+          value - the file and scripts/fetch-vault-pass.sh have drifted apart.
+        success_msg: Vault decrypted via Secret Manager; smoke value matches.
+      run_once: true
+
+  roles:
+    - role: common
+    - role: docker
+    - role: node_exporter
+    - role: gh_runner

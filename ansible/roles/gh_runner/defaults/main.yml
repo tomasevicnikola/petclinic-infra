@@ -1,0 +1,24 @@
+---
+gh_runner_version: "2.336.0"
+gh_runner_checksum: "sha256:04cf0be1aff4c3ec3554466c39124ca250e3effd8873bb7e8d68535aa9505d5d"
+gh_runner_arch: linux-x64
+
+gh_runner_user: runner
+gh_runner_group: runner
+gh_runner_dir: /opt/actions-runner
+gh_runner_work_dir: _work
+
+gh_runner_url: ""
+gh_runner_name: "{{ inventory_hostname }}"
+gh_runner_labels: self-hosted,gcp,ops
+
+gh_runner_dependencies:
+  - libicu74
+
+gh_runner_disable_update: true
+
+gh_runner_replace: true
+
+gh_runner_ephemeral: false
+
+gh_runner_token: ""
