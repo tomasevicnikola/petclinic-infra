@@ -77,6 +77,8 @@ jobs:
 
       - name: terraform plan -destroy
         working-directory: envs/${{ inputs.environment }}
+        env:
+          TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS }}
         run: terraform plan -destroy -no-color -lock-timeout=5m -out=tfplan
 
       - name: destroy summary

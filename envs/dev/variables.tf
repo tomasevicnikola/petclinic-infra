@@ -111,9 +111,8 @@ variable "lb_name_prefix" {
 }
 
 variable "lb_allowed_members" {
-  description = "Identities IAP admits to the dev load balancer. The default names nobody, so an apply that forgets to set this locks everyone out rather than exposing the app."
+  description = "Identities IAP admits to the dev load balancer, as IAM members. No default on purpose: this is the whole access control list, and the resources are per-member, so a value that merely looks safe is not safe. ['user:nobody@example.com'] would not fail closed - it would delete the grants that exist and lock the environment out of itself. An unset variable has to stop the run instead, which is what having no default does."
   type        = list(string)
-  default     = ["user:nobody@example.com"]
 }
 
 variable "lb_domain" {

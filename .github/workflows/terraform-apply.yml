@@ -64,7 +64,7 @@ jobs:
       - name: terraform plan
         working-directory: envs/${{ inputs.environment }}
         env:
-          TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS || '["user:nobody@example.com"]' }}
+          TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS }}
         run: terraform plan -no-color -lock-timeout=5m -out=tfplan
 
       - name: plan summary
