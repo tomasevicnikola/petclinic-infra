@@ -180,17 +180,14 @@ jobs:
             "ansible-core==${ANSIBLE_CORE_VERSION}" \
             "ansible-lint==${ANSIBLE_LINT_VERSION}"
 
-      # ansible-lint syntax-checks through ansible-playbook, which loads the
-      # inventory from ansible.cfg - the GCE dynamic one, which this job has no
-      # credentials for and must not have. /dev/null overrides it with a source
-      # that parses to nothing, so the syntax check never reaches for the API.
-      # ansible/README.md explains why 'localhost,' does not work here: it
-      # silently resolves to the ansible/ directory and loads gcp.yml.
       - name: ansible-lint
         working-directory: ansible
         env:
           ANSIBLE_INVENTORY: /dev/null
-        run: ../.venv/bin/ansible-lint --offline
+          ANSIBLE_VAULT_PASSWORD_FILE: ${{ runner.temp }}/vault-pass
+        run: |
+          echo 'lint-does-not-decrypt' > "$ANSIBLE_VAULT_PASSWORD_FILE"
+          ../.venv/bin/ansible-lint --offline
 
   plan:
     name: plan
