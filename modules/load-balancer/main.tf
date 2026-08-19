@@ -19,7 +19,18 @@ locals {
   ssl_certificate = local.self_signed ? google_compute_ssl_certificate.this[0].id : google_compute_managed_ssl_certificate.this[0].id
 
   sslip_host = "${google_compute_global_address.this.address}.sslip.io"
-  host       = local.self_signed ? google_compute_global_address.this.address : var.domain
+
+  # The sslip name, not the bare IP. IAP will not start a sign-in against an
+  # IP literal - it answers 401 and never issues the OAuth redirect, so the
+  # advertised URL would be one nobody can log into:
+  #
+  #   https://<ip>/            -> 401, no Location header
+  #   https://<ip>.sslip.io/   -> 302 to accounts.google.com
+  #
+  # sslip.io resolves the embedded address with no DNS to own, and it is
+  # already the certificate's common name, so the URL, the cert and the
+  # sign-in flow all agree.
+  host = local.self_signed ? local.sslip_host : var.domain
 }
 
 resource "google_compute_global_address" "this" {
