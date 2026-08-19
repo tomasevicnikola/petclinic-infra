@@ -181,3 +181,26 @@ variable "vault_password_version" {
   default     = 1
 }
 
+variable "registry_repository_id" {
+  description = "Name of the dev Docker repository, and the last segment of the registry URL the app pipeline tags against."
+  type        = string
+  default     = "petclinic"
+}
+
+variable "registry_keep_tagged_count" {
+  description = "How many of the most recent dev images survive the cleanup policy regardless of age, and therefore how far back a rollback can reach."
+  type        = number
+  default     = 10
+}
+
+variable "registry_untagged_retention_days" {
+  description = "How long untagged dev images live. Leftovers from failed or superseded builds, referenced by nothing."
+  type        = number
+  default     = 7
+}
+
+variable "registry_tagged_retention_days" {
+  description = "How long a tagged dev image lives once it falls out of the most recent registry_keep_tagged_count."
+  type        = number
+  default     = 30
+}

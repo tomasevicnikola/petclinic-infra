@@ -112,3 +112,18 @@ output "lb_backend_service_name" {
   description = "Backend service name, for checking backend health."
   value       = module.load_balancer.backend_service_name
 }
+
+output "registry_url" {
+  description = "Registry path the app pipeline tags images with. It appends /<image>:sha-<short commit>."
+  value       = module.artifact_registry.registry_url
+}
+
+output "registry_host" {
+  description = "Registry hostname, the argument to gcloud auth configure-docker."
+  value       = module.artifact_registry.registry_host
+}
+
+output "registry_repository_id" {
+  description = "Docker repository name, for gcloud artifacts commands."
+  value       = module.artifact_registry.repository_id
+}
