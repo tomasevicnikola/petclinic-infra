@@ -1,6 +1,7 @@
 locals {
   ops_vm_service_account = "sa-ops-vm@${var.project_id}.iam.gserviceaccount.com"
   app_vm_service_account = "sa-app-vm@${var.project_id}.iam.gserviceaccount.com"
+  cicd_service_account   = "sa-cicd@${var.project_id}.iam.gserviceaccount.com"
 }
 
 module "network" {
@@ -99,4 +100,20 @@ module "secrets" {
 
   vault_password_version    = var.vault_password_version
   vault_deletion_protection = var.vault_deletion_protection
+}
+
+module "artifact_registry" {
+  source = "../../modules/artifact-registry"
+
+  project_id = var.project_id
+  region     = var.region
+
+  repository_id = var.registry_repository_id
+
+  cicd_service_account_email = local.cicd_service_account
+
+  keep_recent_count       = var.registry_keep_recent_count
+  untagged_retention_days = var.registry_untagged_retention_days
+  tagged_retention_days   = var.registry_tagged_retention_days
+  cleanup_dry_run         = var.registry_cleanup_dry_run
 }

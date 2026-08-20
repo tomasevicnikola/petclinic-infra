@@ -42,4 +42,13 @@ reach the application is an edit in Settings followed by an apply rather than a
 commit. IAP also needs an OAuth consent screen, configured once by hand in the
 console — a prerequisite Terraform cannot create for itself.
 
+## Where the application images live
+
+`europe-west3-docker.pkg.dev/petclinic-capstone/petclinic`, created by
+`modules/artifact-registry` and printed by the `registry_url` output. The app
+repository's pipeline builds an image per commit, tags it with the short SHA
+and pushes it there; the application VMs pull from it. That repository is also
+where `sa-cicd` gets its only permission, `roles/artifactregistry.writer`,
+scoped to it alone. `sa-app-vm` still reads project-wide from bootstrap —
+narrowing that is a known follow-up.
 
