@@ -26,6 +26,24 @@ ANSIBLE_CONFIG=ansible/ansible.cfg ansible-playbook ansible/playbooks/app.yml
 takes one instance out of the load balancer at a time instead of all of them.
 The runner needs a registration token the first time — see `docs/RUNNER.md`.
 
+### Deploying a version
+
+Roles are tagged, so a deploy selects a subset:
+
+```sh
+ansible-playbook playbooks/app.yml \
+  --tags common,docker,app_deploy \
+  -e app_deploy_image=europe-west3-docker.pkg.dev/petclinic-capstone/petclinic/petclinic-app@sha256:... \
+  -e app_deploy_placeholder=false
+```
+
+That is what `deploy.yml` in the application repository runs, with a digest
+rather than a tag. `common` and `docker` are in because a fresh MIG instance has
+no Docker and `serial: 1` makes one failed host end the play.
+
+`app_deploy_placeholder` defaults to `true`, so a bare `app.yml` run puts the
+placeholder back.
+
 ### Prerequisites
 
 ```sh
@@ -41,9 +59,10 @@ matches no hosts. `unparsed_is_failed` in `ansible.cfg` turns that into an error
 You also need an OS Login SSH key. The first `gcloud compute ssh` to any
 instance creates and registers one at `~/.ssh/google_compute_engine`.
 
-**Workstation only, for now.** `sa-ops-vm` holds no `compute.viewer`,
-`iap.tunnelResourceAccessor` or `compute.osLogin`, so running from the ops VM
-returns an empty inventory and cannot open a tunnel.
+**Also runs on the ops VM.** `sa-ops-vm` has `compute.viewer`,
+`iap.tunnelResourceAccessor`, `compute.osAdminLogin` and `iam.serviceAccountUser`
+on `sa-app-vm`, all from `bootstrap.sh`. `ansible-core` and the inventory
+plugin's imports come from `common_extra_packages` in `group_vars/ops.yml`.
 
 ## Connection model
 
@@ -105,7 +124,7 @@ an hour, passed per run; `docs/RUNNER.md` has the command.
 | `docker` | Docker Engine and compose plugin from Docker's apt repo, version pinned, log rotation and live-restore |
 | `node_exporter` | pinned release, checksum verified, dedicated nologin user, hardened unit bound to the internal IP |
 | `gh_runner` | ops only; replaces the manual install and adopts one that already exists |
-| `app_deploy` | the application container under systemd |
+| `app_deploy` | the application container under systemd: removes the previous version, pulls the image, runs it, verifies health and datasource |
 
 Everything downloaded is checksum-verified, and the Docker apt key is checked
 twice — the sha256 of the file, and the OpenPGP fingerprint of the key inside
@@ -146,10 +165,11 @@ of inventory *sources*, not a host pattern: `'localhost,'` splits into
 Ansible parses `ansible/` as a directory inventory, finds
 `inventories/dev/gcp.yml` and calls the live GCE API.
 
-CI runs the same command on a GitHub-hosted runner. There is no
-`ansible-playbook` job: reaching these VMs needs the self-hosted runner, and
-that belongs with the deploy phase — and while the repos are public, no
-`runs-on: self-hosted` job may have a `pull_request` trigger.
+CI runs the same command on a GitHub-hosted runner. There is still no
+`ansible-playbook` job here: reaching these VMs needs the self-hosted runner,
+and no `runs-on: self-hosted` job may have a `pull_request` trigger while the
+repos are public. The playbook runs from `deploy.yml` in the application
+repository instead, on `workflow_dispatch` only.
 
 ## Idempotency
 
@@ -166,13 +186,14 @@ The `changed=0` lines are the proof; the `changed=28` lines are the gap below.
 
 ## Known gaps
 
-**Autoscaling produces unconfigured instances.** The MIG scales on CPU, and
-nothing configures a new instance until someone runs `app.yml` again — the
-instance template installs no Docker and no application by design. The fix is a
-baked image or a startup script that pulls the container, and it belongs with
-the deploy phase.
+**Autoscaling produces unconfigured instances.** The instance template installs
+no Docker and no application. Autohealing recreates them and a deploy repairs
+them, since it runs the baseline roles too. The real fix — a baked image — is
+not built.
 
-**`sa-ops-vm` cannot run this.** Three IAM bindings short, as above.
+**A bare baseline run reverts the app to the placeholder.** `app.yml` without
+`app_deploy_image` and `app_deploy_placeholder=false` re-templates the run
+script back to nginx. Always deploy through the pipeline.
 
 **No readiness gate on the runner.** `app_deploy` waits for the health check;
 `gh_runner` only asserts the service started.

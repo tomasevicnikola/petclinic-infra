@@ -1,5 +1,15 @@
 ---
-gh_runner_url: https://github.com/tomasevicnikola/petclinic-infra
+common_extra_packages:
+  - ansible-core
+  - python3-google-auth
+  - python3-requests
+
+gh_runner_infra_url: https://github.com/tomasevicnikola/petclinic-infra
+gh_runner_infra_dir: /opt/actions-runner
+
+gh_runner_app_url: https://github.com/tomasevicnikola/spring-petclinic-capstone
+gh_runner_app_dir: /opt/actions-runner-app
+
 gh_runner_name: "{{ inventory_hostname }}"
 
 gh_runner_labels: self-hosted,gcp,ops
