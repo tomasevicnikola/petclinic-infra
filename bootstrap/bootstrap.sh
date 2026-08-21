@@ -251,8 +251,22 @@ VM_ROLES=(
 step "3c. Roles: ${SA_APP_VM}"
 for role in "${VM_ROLES[@]}"; do grant_project_role "${APP_VM_SA}" "${role}"; done
 
+OPS_CONTROLLER_ROLES=(
+  "roles/compute.viewer"             # gcp_compute dynamic inventory lists the MIG instances
+  "roles/iap.tunnelResourceAccessor" # open the IAP SSH tunnel; no VM has a public IP
+  "roles/compute.osAdminLogin"       # OS Login WITH sudo - app_deploy runs `become: true`
+)
+
 step "3d. Roles: ${SA_OPS_VM}"
 for role in "${VM_ROLES[@]}"; do grant_project_role "${OPS_VM_SA}" "${role}"; done
+for role in "${OPS_CONTROLLER_ROLES[@]}"; do grant_project_role "${OPS_VM_SA}" "${role}"; done
+
+gcloud iam service-accounts add-iam-policy-binding "${APP_VM_SA}" \
+  --project="${PROJECT_ID}" \
+  --member="serviceAccount:${OPS_VM_SA}" \
+  --role="roles/iam.serviceAccountUser" \
+  --quiet >/dev/null
+bound "roles/iam.serviceAccountUser -> ${OPS_VM_SA} (on ${APP_VM_SA} only)"
 
 # ------------------------------------- 4. Workload Identity Federation -------
 

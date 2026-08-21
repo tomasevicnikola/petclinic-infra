@@ -12,3 +12,5 @@ galaxy_info:
         - noble
 
 dependencies: []
+
+allow_duplicates: true

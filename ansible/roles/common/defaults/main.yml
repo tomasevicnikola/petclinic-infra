@@ -10,6 +10,8 @@ common_packages:
   - python3-debian
   - unattended-upgrades
 
+common_extra_packages: []
+
 common_unattended_origins:
   - "${distro_id}:${distro_codename}-security"
   - "${distro_id}ESMApps:${distro_codename}-apps-security"

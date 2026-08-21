@@ -13,9 +13,25 @@
           value - the file and scripts/fetch-vault-pass.sh have drifted apart.
         success_msg: Vault decrypted via Secret Manager; smoke value matches.
       run_once: true
+      tags: [always]
 
   roles:
     - role: common
+      tags: [common]
     - role: docker
+      tags: [docker]
     - role: node_exporter
+      tags: [node_exporter]
     - role: gh_runner
+      tags: [gh_runner]
+      vars:
+        gh_runner_url: "{{ gh_runner_infra_url }}"
+        gh_runner_dir: "{{ gh_runner_infra_dir }}"
+        gh_runner_token: "{{ gh_runner_infra_token | default('') }}"
+
+    - role: gh_runner
+      tags: [gh_runner]
+      vars:
+        gh_runner_url: "{{ gh_runner_app_url }}"
+        gh_runner_dir: "{{ gh_runner_app_dir }}"
+        gh_runner_token: "{{ gh_runner_app_token | default('') }}"

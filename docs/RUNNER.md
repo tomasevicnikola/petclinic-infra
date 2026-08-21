@@ -1,4 +1,4 @@
-# Runner on the ops VM
+# Runners on the ops VM
 
 Managed by Ansible. `ansible/roles/gh_runner` owns the user, the directory, the
 pinned runner release and its systemd service; there is nothing left to do by
@@ -11,6 +11,22 @@ is unchanged and it is the constraint that decides what may be moved here at
 all — the Ansible lint job in `terraform-ci.yml` runs on `ubuntu-latest` for
 exactly this reason.
 
+The application repository's `deploy.yml` is the one job that runs here, and it
+is `workflow_dispatch`-only so the rule above holds without exception.
+
+## Two registrations, one host
+
+| Repository | Directory |
+| --- | --- |
+| `petclinic-infra` | `/opt/actions-runner` |
+| `spring-petclinic-capstone` | `/opt/actions-runner-app` |
+
+A runner is scoped to one repository and there is no organisation to share one
+across, so the role runs twice from `playbooks/ops.yml` with
+`allow_duplicates: true`. The systemd unit name comes from the repository, and
+both carry `self-hosted,gcp,ops` — a job is only offered to runners registered
+to the repository it came from.
+
 ## Run it
 
 From `ansible/` — Ansible only auto-discovers `ansible.cfg` in the current
@@ -21,8 +37,24 @@ file, so that works too.
 
 ```sh
 cd ansible
-read -rsp 'Registration token: ' T; echo
-ansible-playbook playbooks/ops.yml -e gh_runner_token="$T"; unset T
+read -rsp 'Infra registration token: ' T_INFRA; echo
+read -rsp 'App registration token: '   T_APP;   echo
+ansible-playbook playbooks/ops.yml \
+  -e gh_runner_infra_token="$T_INFRA" \
+  -e gh_runner_app_token="$T_APP"
+unset T_INFRA T_APP
+```
+
+Neither is called `gh_runner_token`: `-e` outranks a role parameter and would
+hand one repository's token to both.
+
+Either token can be omitted if that runner is already registered. Adding the
+second runner to a host that already has the first:
+
+```sh
+read -rsp 'App registration token: ' T_APP; echo
+ansible-playbook playbooks/ops.yml --tags gh_runner -e gh_runner_app_token="$T_APP"
+unset T_APP
 ```
 
 `read -rsp` rather than pasting the token onto the command line: an inline value
@@ -33,9 +65,9 @@ Needs Application Default Credentials for the dynamic inventory
 (`gcloud auth application-default login`) and an OS Login SSH key, which the
 first `gcloud compute ssh` to any instance creates and registers.
 
-The token is only needed when no runner is registered yet. Once `.runner` exists
-in `/opt/actions-runner`, the role skips registration entirely and the same
-command works with no extra vars:
+The token is only needed when that runner is not registered yet. Once `.runner`
+exists in the instance's directory, the role skips registration entirely and the
+same command works with no extra vars:
 
 ```sh
 ansible-playbook playbooks/ops.yml
@@ -63,7 +95,12 @@ token from the `config.sh` line. Or:
 ```sh
 gh api -X POST repos/tomasevicnikola/petclinic-infra/actions/runners/registration-token \
   --jq .token
+
+gh api -X POST repos/tomasevicnikola/spring-petclinic-capstone/actions/runners/registration-token \
+  --jq .token
 ```
+
+One per repository; a token minted for one will not register against the other.
 
 It lasts about an hour and is single-use, which is why it is passed per run and
 is not in Ansible Vault and not in Secret Manager. Storing a credential that
@@ -78,21 +115,22 @@ the token is already spent.
 - User `runner`, no sudo, and **not** in the `docker` group. Jobs are arbitrary
   repo code; the docker group is root with extra steps. Reasoning in
   `ansible/README.md`, "The runner is not in the docker group".
-- `/opt/actions-runner`, mode 0750 — `config.sh` leaves long-lived credentials
-  in `.credentials` there.
+- One directory per registration, mode 0750 — `config.sh` leaves long-lived
+  credentials in `.credentials` there.
 - Runner version and SHA-256 pinned in the role defaults, checksum verified on
   download, taken from the release notes rather than from the downloaded file.
 - `--disableupdate`, so the pinned version keeps describing what is installed
   instead of the runner replacing its own binary overnight.
 - `--replace`, so a rebuilt ops VM can take its name back instead of failing
   against the offline runner the old VM left behind.
-- Labels `self-hosted,gcp,ops`, unchanged from the manual install.
+- Labels `self-hosted,gcp,ops` on both, unchanged from the manual install.
 - Service via the vendor's `svc.sh`, so the unit name matches what a hand
   install produces and both are managed the same way.
 
-Not `--ephemeral` yet. It is the right answer once jobs actually run here, but
-it needs something to register the replacement after each job, and that
-automation arrives with the deploy phase.
+Not `--ephemeral`. It needs something to register the replacement after each
+job — a long-lived PAT or a GitHub App on this VM — which is close to circular.
+Instead: the runner user has no sudo and no Docker access, and the only workflow
+that reaches this host is `workflow_dispatch`-gated behind a required reviewer.
 
 ## SSH in
 
@@ -116,8 +154,12 @@ Deletion protection stays off on purpose, so the destroy workflow keeps working.
 
 ## Remove
 
+Per instance — `/opt/actions-runner` for infra, `/opt/actions-runner-app` for
+the application repository — and the removal token must come from that same
+repository:
+
 ```sh
-cd /opt/actions-runner
+cd /opt/actions-runner-app          # or /opt/actions-runner
 sudo ./svc.sh stop && sudo ./svc.sh uninstall
 read -rsp 'Removal token: ' RUNNER_TOKEN; echo
 sudo -u runner ./config.sh remove --token "$RUNNER_TOKEN"

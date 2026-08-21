@@ -73,6 +73,73 @@
   when: app_deploy_placeholder | bool
   notify: Restart the application
 
+- name: Look for the application unit
+  ansible.builtin.stat:
+    path: /etc/systemd/system/{{ app_deploy_service_name }}.service
+  register: app_deploy_unit
+  become: true
+
+- name: Look for a previously deployed container
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - --format
+      - "{% raw %}{{.Config.Image}}{% endraw %}"
+      - "{{ app_deploy_container_name }}"
+  register: app_deploy_previous
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Record which image the previous container was built from
+  ansible.builtin.set_fact:
+    app_deploy_previous_image: >-
+      {{ app_deploy_previous.stdout | trim
+         if app_deploy_previous.rc == 0
+         else '' }}
+
+- name: Report the result of the previous-version check
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'Previous version present: ' ~ app_deploy_previous_image ~
+         (' (same as the requested image - nothing to remove)'
+          if app_deploy_previous_image == app_deploy_image
+          else ' (differs from the requested image - removing it)')
+         if app_deploy_previous_image
+         else 'No previous container on this instance; this is a first deploy.' }}
+
+- name: Pull the image from Artifact Registry
+  ansible.builtin.command:
+    cmd: docker pull {{ app_deploy_image }}
+  register: app_deploy_pull
+  changed_when: "'Downloaded newer image' in app_deploy_pull.stdout"
+  retries: 3
+  delay: 10
+  until: app_deploy_pull is succeeded
+  become: true
+
+- name: Remove the previous version
+  when:
+    - app_deploy_previous_image | length > 0
+    - app_deploy_previous_image != app_deploy_image
+  become: true
+  block:
+    - name: Stop the application before removing its container
+      ansible.builtin.systemd_service:
+        name: "{{ app_deploy_service_name }}"
+        state: stopped
+      when: app_deploy_unit.stat.exists
+
+    - name: Remove the previous container
+      ansible.builtin.command:
+        cmd: docker rm --force {{ app_deploy_container_name }}
+      register: app_deploy_removed
+      changed_when: app_deploy_removed.rc == 0
+      failed_when:
+        - app_deploy_removed.rc != 0
+        - "'No such container' not in app_deploy_removed.stderr"
+
 - name: Install the container run script
   ansible.builtin.template:
     src: petclinic-app-run.sh.j2
@@ -94,6 +161,9 @@
   become: true
   notify: Restart the application
 
+- name: Apply any pending restart before verifying
+  ansible.builtin.meta: flush_handlers
+
 - name: Enable the application
   ansible.builtin.systemd_service:
     name: "{{ app_deploy_service_name }}"
@@ -111,3 +181,32 @@
   delay: 5
   until: app_deploy_health is succeeded
   changed_when: false
+
+- name: Read the datasource the running container was started with
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - "{{ app_deploy_container_name }}"
+      - sh
+      - -c
+      - printf '%s' "$SPRING_DATASOURCE_URL"
+  register: app_deploy_running
+  changed_when: false
+  become: true
+  when: not (app_deploy_placeholder | bool)
+
+- name: Confirm the application is on Cloud SQL and not an embedded database
+  ansible.builtin.assert:
+    that:
+      - app_deploy_datasource_url is match('^jdbc:mysql://')
+    fail_msg: >-
+      The container is serving, but its datasource is
+      '{{ app_deploy_datasource_url | default('(unset)') }}' - not the MySQL
+      instance. An unset SPRING_DATASOURCE_URL means Spring Boot fell back to
+      the embedded H2 database, which answers the health check exactly like a
+      real one. Check that dev-db-app-config is readable by sa-app-vm.
+    success_msg: "Datasource: {{ app_deploy_datasource_url }}"
+  vars:
+    app_deploy_datasource_url: "{{ app_deploy_running.stdout | default('') | trim }}"
+  when: not (app_deploy_placeholder | bool)
