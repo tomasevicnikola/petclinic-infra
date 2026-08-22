@@ -65,17 +65,18 @@ jobs:
         working-directory: envs/${{ inputs.environment }}
         env:
           TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS }}
+          TF_VAR_iap_oauth_client_secret: ${{ secrets.IAP_OAUTH_CLIENT_SECRET }}
         run: terraform plan -no-color -lock-timeout=5m -out=tfplan
 
-      - name: plan summary
+      - name: render plan
         working-directory: envs/${{ inputs.environment }}
-        run: terraform show -no-color tfplan
+        run: terraform show -no-color tfplan | tee plan.txt
 
-      - name: upload plan
+      - name: upload rendered plan
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: tfplan-${{ inputs.environment }}-${{ github.run_id }}
-          path: envs/${{ inputs.environment }}/tfplan
+          name: plan-${{ inputs.environment }}-${{ github.run_id }}
+          path: envs/${{ inputs.environment }}/plan.txt
           retention-days: 5
           if-no-files-found: error
 
@@ -113,12 +114,6 @@ jobs:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
 
-      - name: download plan
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: tfplan-${{ inputs.environment }}-${{ github.run_id }}
-          path: envs/${{ inputs.environment }}
-
       - name: terraform init
         working-directory: envs/${{ inputs.environment }}
         run: |
@@ -127,4 +122,7 @@ jobs:
 
       - name: terraform apply
         working-directory: envs/${{ inputs.environment }}
-        run: terraform apply -no-color -lock-timeout=5m tfplan
+        env:
+          TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS }}
+          TF_VAR_iap_oauth_client_secret: ${{ secrets.IAP_OAUTH_CLIENT_SECRET }}
+        run: terraform apply -no-color -lock-timeout=5m -auto-approve

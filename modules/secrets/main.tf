@@ -14,7 +14,8 @@ terraform {
 }
 
 locals {
-  vault_secret_id = "${var.env_prefix}-ansible-vault-password"
+  vault_secret_id            = "${var.env_prefix}-ansible-vault-password"
+  iap_oauth_client_secret_id = "${var.env_prefix}-iap-oauth-client-secret"
 }
 
 ephemeral "random_password" "ansible_vault" {
@@ -61,4 +62,33 @@ resource "google_secret_manager_secret_iam_member" "ansible_vault_accessor" {
   secret_id = google_secret_manager_secret.ansible_vault.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${var.ops_service_account_email}"
+}
+
+resource "google_secret_manager_secret" "iap_oauth_client" {
+  project             = var.project_id
+  secret_id           = local.iap_oauth_client_secret_id
+  deletion_protection = false
+
+  labels = {
+    component = "load-balancer"
+  }
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+resource "google_secret_manager_secret_version" "iap_oauth_client" {
+  secret                 = google_secret_manager_secret.iap_oauth_client.id
+  secret_data_wo         = var.iap_oauth_client_secret
+  secret_data_wo_version = var.iap_oauth_client_secret_version
+  deletion_policy        = "DISABLE"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }

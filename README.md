@@ -39,8 +39,11 @@ allowed address. That list of identities is the one value the pipeline does not
 read from the code. It comes from the `LB_ALLOWED_MEMBERS` repository variable,
 passed to the plan steps as `TF_VAR_lb_allowed_members`, so changing who can
 reach the application is an edit in Settings followed by an apply rather than a
-commit. IAP also needs an OAuth consent screen, configured once by hand in the
-console — a prerequisite Terraform cannot create for itself.
+commit. IAP also needs an OAuth consent screen and a custom OAuth client,
+configured once by hand in the console — prerequisites Terraform cannot create
+for itself. The client has to be a custom one, because the Google-managed
+default admits only identities internal to the organization. See
+`modules/load-balancer/README.md`.
 
 ## Where the application images live
 
