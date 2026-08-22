@@ -177,8 +177,8 @@
     url: http://{{ internal_ip }}:{{ app_deploy_port }}/actuator/health
     status_code: 200
   register: app_deploy_health
-  retries: 12
-  delay: 5
+  retries: "{{ app_deploy_health_retries }}"
+  delay: "{{ app_deploy_health_delay }}"
   until: app_deploy_health is succeeded
   changed_when: false
 

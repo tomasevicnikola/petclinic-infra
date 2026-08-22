@@ -24,6 +24,9 @@ app_deploy_fetch_db_password: "{{ not (app_deploy_placeholder | bool) }}"
 
 app_deploy_spring_profile: mysql
 
+app_deploy_health_retries: 40
+app_deploy_health_delay: 5
+
 app_deploy_env: {}
 
 app_deploy_registry: europe-west3-docker.pkg.dev
