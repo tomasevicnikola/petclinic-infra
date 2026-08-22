@@ -19,3 +19,21 @@ enabling IAP fails. Without a domain the certificate is self-signed and browsers
 will warn; setting `domain` switches to a managed one. The backend stays
 UNHEALTHY until the instances actually run the application, so a 502 after
 signing in is the sign that the load balancer itself works.
+
+## Deploy pipeline access
+
+`sa-ops-vm` is on `allowed_members` via the `LB_ALLOWED_MEMBERS` repository
+variable — the list is not in this repo, so `gh variable get LB_ALLOWED_MEMBERS`
+is the only way to read it. The grant is `roles/iap.httpsResourceAccessor` on
+this backend service only.
+
+That grant is necessary but not sufficient. IAP here uses the Google-managed
+OAuth client, which rejects a service-account ID token whatever audience it
+carries — `Invalid JWT audience`, tested against the resource path, the URL and
+the self link. Programmatic access needs a custom OAuth client, and the IAP
+OAuth Admin API that created those was shut down in March 2026.
+
+So the deploy workflow's load balancer check warns instead of failing, and that
+is permanent rather than a TODO. Per-instance checks against each internal IP
+are what actually verify a release; the load balancer is verified by signing in
+as a human.

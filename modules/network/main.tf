@@ -130,6 +130,27 @@ resource "google_compute_firewall" "internal_monitoring" {
   }
 }
 
+resource "google_compute_firewall" "ops_to_app" {
+  project     = var.project_id
+  name        = "${var.network_name}-allow-ops-to-app"
+  network     = google_compute_network.this.id
+  description = "Post-deploy verification from the ops VM against each instance's application port."
+
+  direction   = "INGRESS"
+  priority    = 1000
+  source_tags = [local.tags.ops]
+  target_tags = [local.tags.app]
+
+  allow {
+    protocol = "tcp"
+    ports    = [tostring(var.app_port)]
+  }
+
+  log_config {
+    metadata = "INCLUDE_ALL_METADATA"
+  }
+}
+
 resource "google_compute_global_address" "psa" {
   project       = var.project_id
   name          = "${var.network_name}-psa-range"
