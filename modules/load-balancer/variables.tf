@@ -98,3 +98,24 @@ variable "log_sample_rate" {
     error_message = "log_sample_rate must be between 0 and 1."
   }
 }
+
+variable "iap_oauth_client_id" {
+  description = "OAuth 2.0 client IAP authenticates against. Created by hand in the console; a Google-managed client would admit only identities internal to the organization."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+-[a-z0-9]+\\.apps\\.googleusercontent\\.com$", var.iap_oauth_client_id))
+    error_message = "iap_oauth_client_id must look like 123456789-abc123def456.apps.googleusercontent.com."
+  }
+}
+
+variable "iap_oauth_client_secret" {
+  description = "Secret of iap_oauth_client_id. Sensitive hides it from CLI output but not from state: the backend service attribute that consumes it is not write-only."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(var.iap_oauth_client_secret) > 0
+    error_message = "iap_oauth_client_secret must not be empty; IAP rejects a client id with no secret."
+  }
+}

@@ -44,3 +44,25 @@ variable "ops_service_account_email" {
     error_message = "ops_service_account_email must be a service account address, not a user account."
   }
 }
+
+variable "iap_oauth_client_secret" {
+  description = "Secret of the IAP OAuth client, stored as the durable copy. Nothing reads it at run time."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(var.iap_oauth_client_secret) > 0
+    error_message = "iap_oauth_client_secret must not be empty."
+  }
+}
+
+variable "iap_oauth_client_secret_version" {
+  description = "Bump after rotating the client secret in the console, so the write-only value is sent again."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.iap_oauth_client_secret_version >= 1
+    error_message = "iap_oauth_client_secret_version must be at least 1."
+  }
+}

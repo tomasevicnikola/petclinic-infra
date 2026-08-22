@@ -115,6 +115,24 @@ variable "lb_allowed_members" {
   type        = list(string)
 }
 
+variable "iap_oauth_client_id" {
+  description = "OAuth 2.0 client IAP authenticates against, created by hand in the console. Not a secret, so it is committed rather than passed in out-of-band."
+  type        = string
+  default     = "923128095631-v96nc3sies5njkaghoublmacb74nmesr.apps.googleusercontent.com"
+}
+
+variable "iap_oauth_client_secret" {
+  description = "Secret of iap_oauth_client_id, supplied as TF_VAR_iap_oauth_client_secret from the IAP_OAUTH_CLIENT_SECRET Actions secret. Persisted in the state file - see modules/load-balancer/README.md."
+  type        = string
+  sensitive   = true
+}
+
+variable "iap_oauth_client_secret_version" {
+  description = "Bump together with a rotation of the client secret in the console."
+  type        = number
+  default     = 1
+}
+
 variable "lb_domain" {
   description = "Domain for a managed certificate. Null while no domain exists, which makes the module issue a self-signed one."
   type        = string

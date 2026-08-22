@@ -87,6 +87,9 @@ module "load_balancer" {
 
   allowed_members = var.lb_allowed_members
   domain          = var.lb_domain
+
+  iap_oauth_client_id     = var.iap_oauth_client_id
+  iap_oauth_client_secret = var.iap_oauth_client_secret
 }
 
 module "secrets" {
@@ -100,6 +103,9 @@ module "secrets" {
 
   vault_password_version    = var.vault_password_version
   vault_deletion_protection = var.vault_deletion_protection
+
+  iap_oauth_client_secret         = var.iap_oauth_client_secret
+  iap_oauth_client_secret_version = var.iap_oauth_client_secret_version
 }
 
 module "artifact_registry" {

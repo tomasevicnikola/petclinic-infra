@@ -234,6 +234,7 @@ jobs:
         working-directory: envs/dev
         env:
           TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS }}
+          TF_VAR_iap_oauth_client_secret: ${{ secrets.IAP_OAUTH_CLIENT_SECRET }}
         run: |
           set +e
           terraform plan -no-color -lock-timeout=5m -detailed-exitcode -out=tfplan
