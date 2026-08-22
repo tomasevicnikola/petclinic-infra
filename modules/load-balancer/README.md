@@ -19,3 +19,19 @@ enabling IAP fails. Without a domain the certificate is self-signed and browsers
 will warn; setting `domain` switches to a managed one. The backend stays
 UNHEALTHY until the instances actually run the application, so a 502 after
 signing in is the sign that the load balancer itself works.
+
+## Custom OAuth client
+
+IAP uses a custom OAuth client, not the Google-managed one. The managed client
+admits only identities internal to the organization, so an account from outside
+it signs in and is then refused whatever IAM says, and service accounts get no
+programmatic access at all. The client is created by hand in the console;
+`iap_oauth_client_id` is committed and the secret arrives as
+`TF_VAR_iap_oauth_client_secret`.
+
+The consent screen is External and stays in Testing, which caps it at 100 test
+users. An account has to be on that test user list *and* in `allowed_members` —
+missing from either one gives a 403.
+
+`oauth2_client_secret` is not a write-only argument, so unlike the other secrets
+in this repository it is persisted in the state file.
