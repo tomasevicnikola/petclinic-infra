@@ -9,8 +9,13 @@ output "instance_group_manager_name" {
 }
 
 output "health_check_self_link" {
-  description = "Health check self link. The group only uses it when autohealing is on; the load balancer will use it too."
+  description = "Self link of the load balancer's health check: fast, so a bad backend leaves the pool quickly. Autohealing deliberately uses a different, slower one."
   value       = google_compute_health_check.this.self_link
+}
+
+output "autohealing_health_check_self_link" {
+  description = "Self link of the autohealing check. Slower and more forgiving than the load balancer's, so a redeploy is not mistaken for a dead instance."
+  value       = google_compute_health_check.autohealing.self_link
 }
 
 output "instance_template_name" {

@@ -12,6 +12,8 @@ terraform {
 locals {
   named_port         = "http"
   base_instance_name = coalesce(var.base_instance_name, var.name_prefix)
+
+  app_image = coalesce(var.app_image, "projects/${var.project_id}/global/images/family/petclinic-app")
 }
 
 resource "google_compute_instance_template" "this" {
@@ -22,7 +24,7 @@ resource "google_compute_instance_template" "this" {
   tags = var.network_tags
 
   disk {
-    source_image = var.boot_image
+    source_image = local.app_image
     disk_size_gb = var.boot_disk_size_gb
     disk_type    = "pd-balanced"
     boot         = true
@@ -47,24 +49,15 @@ resource "google_compute_instance_template" "this" {
   metadata = {
     enable-oslogin         = "TRUE"
     block-project-ssh-keys = "TRUE"
+
+    # Read on first boot by petclinic-app-run.sh, baked into the image. A deploy
+    # is a new template plus a rolling replace, never an image rebuild.
+    app-image-digest = var.app_image_digest
+    app-env          = var.app_env
   }
 
-  metadata_startup_script = <<-EOT
-    #!/bin/bash
-    set -euo pipefail
-    export DEBIAN_FRONTEND=noninteractive
-
-    for _ in $(seq 1 10); do
-      if apt-get update && apt-get install -y unattended-upgrades; then
-        break
-      fi
-      sleep 15
-    done
-
-    printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' \
-      > /etc/apt/apt.conf.d/20auto-upgrades
-    systemctl enable --now unattended-upgrades
-  EOT
+  # No startup script: the image is the configuration. See
+  # docs/adr/0001-baked-images.md.
 
   lifecycle {
     create_before_destroy = true
@@ -79,6 +72,25 @@ resource "google_compute_health_check" "this" {
   timeout_sec         = 5
   healthy_threshold   = 2
   unhealthy_threshold = 3
+
+  http_health_check {
+    port         = var.app_port
+    request_path = var.health_check_path
+  }
+
+  log_config {
+    enable = true
+  }
+}
+
+resource "google_compute_health_check" "autohealing" {
+  project = var.project_id
+  name    = "${var.name_prefix}-autoheal-hc"
+
+  check_interval_sec  = 30
+  timeout_sec         = 10
+  healthy_threshold   = 2
+  unhealthy_threshold = 5
 
   http_health_check {
     port         = var.app_port
@@ -117,7 +129,7 @@ resource "google_compute_region_instance_group_manager" "this" {
     for_each = var.enable_autohealing ? [1] : []
 
     content {
-      health_check      = google_compute_health_check.this.id
+      health_check      = google_compute_health_check.autohealing.id
       initial_delay_sec = var.autohealing_initial_delay_sec
     }
   }
@@ -130,8 +142,9 @@ resource "google_compute_region_autoscaler" "this" {
   target  = google_compute_region_instance_group_manager.this.id
 
   autoscaling_policy {
-    min_replicas    = var.min_replicas
-    max_replicas    = var.max_replicas
+    min_replicas = var.min_replicas
+    max_replicas = var.max_replicas
+
     cooldown_period = var.cooldown_period_sec
 
     cpu_utilization {

@@ -2,6 +2,16 @@ locals {
   ops_vm_service_account = "sa-ops-vm@${var.project_id}.iam.gserviceaccount.com"
   app_vm_service_account = "sa-app-vm@${var.project_id}.iam.gserviceaccount.com"
   cicd_service_account   = "sa-cicd@${var.project_id}.iam.gserviceaccount.com"
+
+  app_image_digest = coalesce(
+    var.app_image_digest,
+    trimspace(data.google_storage_bucket_object_content.app_image_digest.content),
+  )
+}
+
+data "google_storage_bucket_object_content" "app_image_digest" {
+  bucket = var.deploy_state_bucket
+  name   = "deploy/${var.env_prefix}/app-image-digest"
 }
 
 module "network" {
@@ -71,6 +81,10 @@ module "compute_mig" {
   min_replicas = var.app_min_replicas
   max_replicas = var.app_max_replicas
   cpu_target   = var.app_cpu_target
+
+  app_image        = var.app_image
+  app_image_digest = local.app_image_digest
+  app_env          = var.env_prefix
 
   enable_autohealing = var.app_enable_autohealing
 }
