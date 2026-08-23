@@ -152,9 +152,32 @@ variable "app_name_prefix" {
 }
 
 variable "app_machine_type" {
-  description = "Machine type of the application instances."
+  description = "Machine type of the application instances. e2-medium, not e2-small: shared-core burst credits make cpu_utilization non-linear, so an autoscaler reading that metric is miscalibrated whatever else is true."
   type        = string
-  default     = "e2-small"
+  default     = "e2-medium"
+}
+
+variable "app_image" {
+  description = "Image the application instances boot from. Null tracks the petclinic-app family, so the newest bake is picked up by the next replace. Set an exact image self link to pin one, for a reproducible rollback."
+  type        = string
+  default     = null
+}
+
+variable "app_image_digest" {
+  description = "Overrides the deployed container digest instead of reading it from the state bucket. Empty means read the object, which is the normal path; a value here is for breaking glass when the object is wrong or missing."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.app_image_digest == "" || can(regex("^sha256:[0-9a-f]{64}$", var.app_image_digest))
+    error_message = "app_image_digest must be empty or a sha256 digest."
+  }
+}
+
+variable "deploy_state_bucket" {
+  description = "Bucket holding the deployed-digest pointer. The Terraform state bucket: the deployed version is state, it has exactly the same access boundary, and a second bucket would only be a second thing to secure."
+  type        = string
+  default     = "petclinic-capstone-tfstate"
 }
 
 variable "app_min_replicas" {
@@ -176,9 +199,9 @@ variable "app_cpu_target" {
 }
 
 variable "app_enable_autohealing" {
-  description = "Autohealing on the dev group. False until the deploy pipeline puts the application on the instances; a health check against an empty instance would recreate it forever."
+  description = "Autohealing on the dev group. On since instances boot from a baked image and start serving without any Ansible run - the empty-instance problem that kept this off is gone."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "env_prefix" {
