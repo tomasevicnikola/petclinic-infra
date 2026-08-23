@@ -1,0 +1,19 @@
+---
+# The registry is stable across environments; the version is instance metadata.
+app_runtime_registry: europe-west3-docker.pkg.dev
+app_runtime_image_repo: europe-west3-docker.pkg.dev/petclinic-capstone/petclinic/petclinic-app
+
+app_runtime_container_name: petclinic
+app_runtime_port: 8080
+app_runtime_container_port: 8080
+
+app_runtime_service_name: petclinic-app
+app_runtime_run_script: /usr/local/bin/petclinic-app-run.sh
+
+app_runtime_gcloud_bin: /snap/bin/gcloud
+
+# Prefixed with app-env at runtime, so one image serves every environment.
+app_runtime_db_config_secret_suffix: db-app-config
+app_runtime_db_password_secret_suffix: db-app-password
+
+app_runtime_spring_profile: mysql

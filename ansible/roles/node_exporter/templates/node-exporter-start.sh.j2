@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Managed by Ansible (roles/node_exporter). Edits here are overwritten.
+#
+# Resolves this instance's internal IP and execs node_exporter bound to it. A
+# baked image cannot know the address in advance, so it is resolved per start.
+set -euo pipefail
+
+readonly BIN={{ node_exporter_bin | quote }}
+readonly PORT={{ node_exporter_port }}
+readonly METADATA="http://metadata.google.internal/computeMetadata/v1"
+
+for _ in $(seq 1 10); do
+  if ip="$(curl -sf --max-time 5 -H 'Metadata-Flavor: Google' \
+             "${METADATA}/instance/network-interfaces/0/ip")" && [ -n "${ip}" ]; then
+    exec "${BIN}" --web.listen-address="${ip}:${PORT}" "$@"
+  fi
+  sleep 2
+done
+
+# No fallback to 0.0.0.0: failing closed keeps the exporter down and visible.
+echo "could not read the internal IP from the metadata server" >&2
+exit 1

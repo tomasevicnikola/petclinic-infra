@@ -17,6 +17,7 @@ locals {
     ssh_iap = "ssh-iap"
     app     = "app"
     ops     = "ops"
+    packer  = "packer-build"
   }
 
   psa_address       = split("/", var.psa_cidr)[0]
@@ -123,6 +124,27 @@ resource "google_compute_firewall" "internal_monitoring" {
   allow {
     protocol = "tcp"
     ports    = [tostring(var.node_exporter_port)]
+  }
+
+  log_config {
+    metadata = "INCLUDE_ALL_METADATA"
+  }
+}
+
+resource "google_compute_firewall" "ops_to_packer" {
+  project     = var.project_id
+  name        = "${var.network_name}-allow-ops-to-packer"
+  network     = google_compute_network.this.id
+  description = "Packer provisioning the image builder from the ops VM, over the internal network."
+
+  direction   = "INGRESS"
+  priority    = 1000
+  source_tags = [local.tags.ops]
+  target_tags = [local.tags.packer]
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
   }
 
   log_config {

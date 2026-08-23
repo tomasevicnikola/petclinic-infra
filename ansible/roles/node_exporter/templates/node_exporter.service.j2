@@ -9,8 +9,8 @@ Wants=network-online.target
 Type=simple
 User={{ node_exporter_user }}
 Group={{ node_exporter_group }}
-ExecStart={{ node_exporter_bin }} \
-  --web.listen-address={{ node_exporter_listen_address }}:{{ node_exporter_port }} \
+# The wrapper binds the exporter to this instance's own address, never 0.0.0.0.
+ExecStart={{ node_exporter_start_script }} \
   --collector.disable-defaults \
 {% for collector in node_exporter_collectors %}
   --collector.{{ collector }}{{ " \\" if not loop.last else "" }}

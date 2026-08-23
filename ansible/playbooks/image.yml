@@ -1,0 +1,41 @@
+---
+# Run by Packer against a throwaway builder VM whose disk becomes the image.
+# gh_runner is ops-only. The application version is not baked - app_runtime
+# installs the runner that reads it from instance metadata at boot.
+- name: Bake the application VM image
+  hosts: all
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: common
+    - role: docker
+    - role: node_exporter
+    - role: app_runtime
+
+  post_tasks:
+    - name: Confirm docker answers
+      ansible.builtin.command: docker --version
+      changed_when: false
+
+    - name: Confirm the node exporter unit is enabled
+      ansible.builtin.systemd_service:
+        name: node_exporter
+      register: image_node_exporter
+      failed_when: image_node_exporter.status.UnitFileState != "enabled"
+      changed_when: false
+
+    - name: Confirm the application unit is enabled but not running
+      ansible.builtin.systemd_service:
+        name: petclinic-app
+      register: image_app_unit
+      failed_when:
+        - image_app_unit.status.UnitFileState != "enabled"
+      changed_when: false
+
+    - name: Confirm the run script refuses to start without an image digest
+      ansible.builtin.command: /usr/local/bin/petclinic-app-run.sh
+      register: image_run_script
+      failed_when:
+        - image_run_script.rc == 0 or 'app-image-digest' not in image_run_script.stderr
+      changed_when: false

@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# Managed by Ansible (roles/app_runtime), baked into the petclinic-app image.
+# Edits here are overwritten by the next image build.
+#
+# Which container to run comes from instance metadata, so the image is
+# version-agnostic. Database credentials are read from Secret Manager as this
+# instance's service account and passed to docker over stdin; this script never
+# writes them. Docker itself keeps them in the container config, visible to root
+# via docker inspect.
+set -euo pipefail
+
+readonly CONTAINER={{ app_runtime_container_name | quote }}
+readonly IMAGE_REPO={{ app_runtime_image_repo | quote }}
+readonly PORT={{ app_runtime_port }}
+readonly CONTAINER_PORT={{ app_runtime_container_port }}
+readonly GCLOUD={{ app_runtime_gcloud_bin | quote }}
+readonly METADATA="http://metadata.google.internal/computeMetadata/v1"
+
+log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" >&2; }
+
+# Retried: unlike the metadata server, this is a network call.
+secret() {
+  local name="$1" value
+  for _ in $(seq 1 5); do
+    if value="$("${GCLOUD}" secrets versions access latest \
+                  --secret="${name}" --project="${project}" 2>/dev/null)"; then
+      printf '%s' "${value}"
+      return 0
+    fi
+    sleep 3
+  done
+  return 1
+}
+
+metadata() {
+  local path="$1" value
+  for _ in $(seq 1 10); do
+    if value="$(curl -sf --max-time 5 -H 'Metadata-Flavor: Google' "${METADATA}/${path}")"; then
+      printf '%s' "${value}"
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+if [ ! -x "${GCLOUD}" ]; then
+  log "FATAL ${GCLOUD} not found - the Google Cloud CLI snap is missing from this image"
+  exit 1
+fi
+
+project="$(metadata project/project-id)" || {
+  log "FATAL could not read the project id from the metadata server"
+  exit 1
+}
+
+bind_ip="$(metadata instance/network-interfaces/0/ip)" || {
+  log "FATAL could not read the internal IP from the metadata server"
+  exit 1
+}
+
+digest="$(metadata instance/attributes/app-image-digest)" || digest=""
+if [ -z "${digest}" ]; then
+  log "FATAL instance metadata has no app-image-digest."
+  log "      The instance template must set it; see modules/compute-mig."
+  exit 1
+fi
+if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+  log "FATAL app-image-digest is '${digest}', which is not a sha256 digest."
+  exit 1
+fi
+
+# Fatal when absent: a default would mean an instance quietly reading another
+# environment's database credentials.
+app_env="$(metadata instance/attributes/app-env)" || app_env=""
+if [ -z "${app_env}" ]; then
+  log "FATAL instance metadata has no app-env."
+  log "      The instance template must set it; see modules/compute-mig."
+  exit 1
+fi
+if [[ ! "${app_env}" =~ ^[a-z][a-z0-9-]{0,15}$ ]]; then
+  log "FATAL app-env is '${app_env}', which is not an environment name."
+  exit 1
+fi
+
+readonly IMAGE="${IMAGE_REPO}@${digest}"
+readonly DB_CONFIG_SECRET="${app_env}-{{ app_runtime_db_config_secret_suffix }}"
+readonly DB_PASSWORD_SECRET="${app_env}-{{ app_runtime_db_password_secret_suffix }}"
+
+log "environment=${app_env} image=${IMAGE} bind=${bind_ip}:${PORT}"
+
+render_env() {
+  local config host port database username password
+
+  # Checked explicitly, not left to set -e: bash disables errexit inside a
+  # condition context, so a failed call would fall through to the printfs.
+  if ! config="$(secret "${DB_CONFIG_SECRET}")"; then
+    log "could not read ${DB_CONFIG_SECRET} - check sa-app-vm's access to it"
+    return 1
+  fi
+
+  if ! host="$(printf '%s' "${config}" | jq -er .host)" ||
+     ! port="$(printf '%s' "${config}" | jq -er .port)" ||
+     ! database="$(printf '%s' "${config}" | jq -er .database)" ||
+     ! username="$(printf '%s' "${config}" | jq -er .username)"; then
+    log "${DB_CONFIG_SECRET} is not the expected JSON - need host, port, database, username"
+    return 1
+  fi
+
+  if ! password="$(secret "${DB_PASSWORD_SECRET}")"; then
+    log "could not read ${DB_PASSWORD_SECRET} - check sa-app-vm's access to it"
+    return 1
+  fi
+
+  if [ -z "${password}" ]; then
+    log "${DB_PASSWORD_SECRET} is empty"
+    return 1
+  fi
+
+  printf 'SPRING_PROFILES_ACTIVE=%s\n' {{ app_runtime_spring_profile | quote }}
+  printf 'SPRING_DATASOURCE_URL=jdbc:mysql://%s:%s/%s\n' "${host}" "${port}" "${database}"
+  printf 'SPRING_DATASOURCE_USERNAME=%s\n' "${username}"
+  printf 'SPRING_DATASOURCE_PASSWORD=%s\n' "${password}"
+}
+
+# Pull first, so a registry failure leaves the previous version serving.
+log "pulling ${IMAGE}"
+for attempt in $(seq 1 5); do
+  if docker pull --quiet "${IMAGE}" >/dev/null; then
+    break
+  fi
+  if [ "${attempt}" -eq 5 ]; then
+    log "FATAL could not pull ${IMAGE} after 5 attempts"
+    exit 1
+  fi
+  log "pull failed, retrying (${attempt}/5)"
+  sleep 10
+done
+
+# Rendered and checked before the container starts. Piping straight into docker
+# would hand it an empty env file on failure, and Spring Boot with no datasource
+# URL falls back to embedded H2 - which answers /actuator/health exactly like a
+# real database.
+log "reading database configuration for ${app_env}"
+if ! app_env_file="$(render_env)"; then
+  log "FATAL could not read ${DB_CONFIG_SECRET} / ${DB_PASSWORD_SECRET} as this instance's service account"
+  exit 1
+fi
+
+if ! printf '%s' "${app_env_file}" | grep -q '^SPRING_DATASOURCE_URL=jdbc:mysql://[^:]\+:[0-9]\+/.'; then
+  log "FATAL the rendered environment has no usable MySQL datasource URL."
+  log "      Refusing to start: the application would silently fall back to H2."
+  exit 1
+fi
+if ! printf '%s' "${app_env_file}" | grep -q '^SPRING_DATASOURCE_PASSWORD=.'; then
+  log "FATAL the rendered environment has an empty datasource password."
+  exit 1
+fi
+
+docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
+
+log "starting ${CONTAINER}"
+printf '%s\n' "${app_env_file}" | docker run \
+  --rm \
+  --name "${CONTAINER}" \
+  --env-file /dev/stdin \
+  --publish "${bind_ip}:${PORT}:${CONTAINER_PORT}" \
+  --log-driver json-file \
+  --security-opt no-new-privileges \
+  "${IMAGE}"

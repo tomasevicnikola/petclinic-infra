@@ -40,6 +40,12 @@ vault_password_file
 .env.*
 !.env.example
 
+# Packer
+# Build results, not source: the manifest names the image that was produced,
+# and the log is whatever the last local build printed.
+packer/manifest.json
+packer/*.log
+
 # Ansible
 *.retry
 .ansible/

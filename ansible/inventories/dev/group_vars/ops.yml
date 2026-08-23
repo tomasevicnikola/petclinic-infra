@@ -3,6 +3,8 @@ common_extra_packages:
   - ansible-core
   - python3-google-auth
   - python3-requests
+  # The image bake runs here and pins its own ansible in a venv.
+  - python3-venv
 
 gh_runner_infra_url: https://github.com/tomasevicnikola/petclinic-infra
 gh_runner_infra_dir: /opt/actions-runner
@@ -13,5 +15,3 @@ gh_runner_app_dir: /opt/actions-runner-app
 gh_runner_name: "{{ inventory_hostname }}"
 
 gh_runner_labels: self-hosted,gcp,ops
-
-node_exporter_listen_address: "{{ internal_ip }}"
