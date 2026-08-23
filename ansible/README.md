@@ -1,9 +1,31 @@
 # ansible
 
-Configures every VM in the dev project: base packages, Docker, node exporter,
-the self-hosted GitHub runner on the ops VM, and the application container on
-the MIG instances. Terraform builds the machines; nothing here creates
-infrastructure.
+Configures every VM in the project: base packages, Docker, node exporter, the
+application runner, and the self-hosted GitHub runner on the ops VM. Terraform
+builds the machines; nothing here creates infrastructure.
+
+## When each role runs
+
+Two phases. Which one a role belongs to is the thing to know before editing it —
+see [
+
+| Role | Bake | Ops VM | Notes |
+| --- | :-: | :-: | --- |
+| `common` | ● | ● | Base packages, timezone, unattended-upgrades |
+| `docker` | ● | ● | Engine, pinned versions, daemon config |
+| `node_exporter` | ● | ● | Binds to the instance IP, resolved per boot |
+| `app_runtime` | ● | | Installs the boot-time runner; never runs the app |
+| `gh_runner` | | ● | Self-hosted runner registration |
+
+**Bake** — `playbooks/image.yml`, run by Packer against a throwaway builder VM
+whose disk becomes the `petclinic-app` image. Every application instance boots
+from it, so this is how they are configured: at build time, not after boot.
+
+**Ops VM** — `playbooks/ops.yml`. Never baked; the ops VM is a singleton.
+
+Nothing configures a running application instance. Deploying a version does not
+touch them either — it replaces them. See the application repository's
+`deploy.yml`.
 
 ## Running it
 
@@ -12,37 +34,17 @@ here:
 
 ```sh
 cd ansible
-ansible-playbook playbooks/app.yml
+ansible-playbook playbooks/ops.yml
 ```
 
 From the repo root, name the config instead — relative paths inside it resolve
 against the file, not the working directory, so both work:
 
 ```sh
-ANSIBLE_CONFIG=ansible/ansible.cfg ansible-playbook ansible/playbooks/app.yml
+ANSIBLE_CONFIG=ansible/ansible.cfg ansible-playbook ansible/playbooks/ops.yml
 ```
 
-`site.yml` runs both plays, ops first. `app.yml` is `serial: 1`, so a bad change
-takes one instance out of the load balancer at a time instead of all of them.
 The runner needs a registration token the first time — see `docs/RUNNER.md`.
-
-### Deploying a version
-
-Roles are tagged, so a deploy selects a subset:
-
-```sh
-ansible-playbook playbooks/app.yml \
-  --tags common,docker,app_deploy \
-  -e app_deploy_image=europe-west3-docker.pkg.dev/petclinic-capstone/petclinic/petclinic-app@sha256:... \
-  -e app_deploy_placeholder=false
-```
-
-That is what `deploy.yml` in the application repository runs, with a digest
-rather than a tag. `common` and `docker` are in because a fresh MIG instance has
-no Docker and `serial: 1` makes one failed host end the play.
-
-`app_deploy_placeholder` defaults to `true`, so a bare `app.yml` run puts the
-placeholder back.
 
 ### Prerequisites
 
@@ -102,16 +104,15 @@ The password is not in the repo and never on disk: `ansible.cfg` points
 `vault_password_file` at `scripts/fetch-vault-pass.sh`, which reads
 `dev-ansible-vault-password` out of Secret Manager and prints it. "Can decrypt
 this file" is therefore an IAM binding that can be revoked. The file holds one
-placeholder, `vault_smoke_test`, and both playbooks assert on it so every run
-states the result rather than leaving it as an absence of an error.
+value, `vault_smoke_test`, and `ops.yml` asserts on it so every run states the
+result rather than leaving it as an absence of an error.
 
-**Database credentials never touch the controller.** `app_deploy` renders a run
+**Database credentials never touch the controller.** `app_runtime` bakes a run
 script that fetches them on the VM at container start, using the attached
 `sa-app-vm`, and pipes them into `docker run --env-file /dev/stdin`. No env file
-is written to disk. The config half — host, port, database, user — is read on
-every start because none of it is a credential; the password is read only for an
-image that can use one. Residual risk, acknowledged in the script header: once
-running, root can read the environment via `docker inspect`.
+is written to disk, and nothing about them is in the image. Residual risk,
+acknowledged in the script header: once running, root can read the environment
+via `docker inspect`.
 
 **The runner registration token is never stored.** Single-use, expires in about
 an hour, passed per run; `docs/RUNNER.md` has the command.
@@ -124,7 +125,7 @@ an hour, passed per run; `docs/RUNNER.md` has the command.
 | `docker` | Docker Engine and compose plugin from Docker's apt repo, version pinned, log rotation and live-restore |
 | `node_exporter` | pinned release, checksum verified, dedicated nologin user, hardened unit bound to the internal IP |
 | `gh_runner` | ops only; replaces the manual install and adopts one that already exists |
-| `app_deploy` | the application container under systemd: removes the previous version, pulls the image, runs it, verifies health and datasource |
+| `app_runtime` | the boot-time runner: a systemd unit that reads the image digest from instance metadata, fetches the database credentials and starts the container |
 
 Everything downloaded is checksum-verified, and the Docker apt key is checked
 twice — the sha256 of the file, and the OpenPGP fingerprint of the key inside
@@ -138,20 +139,6 @@ equivalence with extra steps, and the runner executes whatever a workflow says,
 on a VM that hands out `cloud-platform` tokens. It needs no Docker access:
 images are built in the application repo's pipeline and the containers run on
 the app VMs.
-
-### The placeholder answers /actuator/health on purpose
-
-The load balancer health check requests `/actuator/health`, which Spring Boot
-Actuator serves once the real application runs. That check is not touched here;
-repointing it at `/` would mean the thing verified today is not the thing
-verified in production.
-
-So the placeholder was made to fit the probe instead: an unprivileged nginx,
-pinned by digest, serving a file at `actuator/health`. The backend goes HEALTHY
-on the same probe the real application will answer, which exercises the load
-balancer, the named port, the health-check firewall rule and the MIG end to end.
-Auto-healing stays off in Terraform until the real image lands — a placeholder
-passing the probe is exactly what you do not want the group treating as success.
 
 ## Linting
 
@@ -187,13 +174,6 @@ The `changed=0` lines are the proof; the `changed=28` lines are the gap below.
 ## Known gaps
 
 **Autoscaling produces unconfigured instances.** The instance template installs
-no Docker and no application. Autohealing recreates them and a deploy repairs
-them, since it runs the baseline roles too. The real fix — a baked image — is
-not built.
-
-**A bare baseline run reverts the app to the placeholder.** `app.yml` without
-`app_deploy_image` and `app_deploy_placeholder=false` re-templates the run
-script back to nginx. Always deploy through the pipeline.
-
-**No readiness gate on the runner.** `app_deploy` waits for the health check;
-`gh_runner` only asserts the service started.
+no Docker and no application. 
+**No readiness gate on the runner.** `gh_runner` asserts the service started,
+nothing more.
