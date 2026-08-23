@@ -276,6 +276,14 @@ gcloud iam service-accounts add-iam-policy-binding "${APP_VM_SA}" \
   --quiet >/dev/null
 bound "roles/iam.serviceAccountUser -> ${OPS_VM_SA} (on ${APP_VM_SA} only)"
 
+gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
+  --project="${PROJECT_ID}" \
+  --member="serviceAccount:${OPS_VM_SA}" \
+  --role="roles/storage.objectUser" \
+  --condition="title=deploy-pointers-only,expression=resource.name.startsWith('projects/_/buckets/${BUCKET}/objects/deploy/')" \
+  --quiet >/dev/null
+bound "roles/storage.objectUser -> ${OPS_VM_SA} (on gs://${BUCKET}/deploy/ only)"
+
 step "3e. Roles: ${SA_PACKER}"
 
 # Short on purpose: the bake creates a throwaway VM and publishes an image.
