@@ -8,7 +8,8 @@ node_exporter_group: node-exporter
 node_exporter_install_dir: /opt/node_exporter
 node_exporter_bin: /usr/local/bin/node_exporter
 
-node_exporter_listen_address: "{{ ansible_facts['default_ipv4']['address'] }}"
+# The listen address is resolved per start by this wrapper, never templated in.
+node_exporter_start_script: /usr/local/bin/node-exporter-start
 node_exporter_port: 9100
 
 node_exporter_collectors:

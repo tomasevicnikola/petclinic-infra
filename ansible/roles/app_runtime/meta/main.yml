@@ -1,0 +1,16 @@
+---
+galaxy_info:
+  role_name: app_runtime
+  author: tomasevicnikola
+  description: >-
+    Boot-time application runner baked into the image. Reads the image digest
+    from instance metadata and the database credentials from Secret Manager.
+  company: petclinic capstone
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []

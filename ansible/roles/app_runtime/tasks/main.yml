@@ -1,0 +1,65 @@
+---
+# Installs the mechanism, never runs the application. The unit is enabled but
+# not started: at build time there is no app-image-digest to read.
+
+- name: Create root's docker configuration directory
+  ansible.builtin.file:
+    path: /root/.docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+
+- name: Configure the Artifact Registry credential helper for root
+  # Delegates to gcloud, which uses the instance's own service account.
+  ansible.builtin.copy:
+    content: "{{ {'credHelpers': {app_runtime_registry: 'gcloud'}} | to_nice_json }}\n"
+    dest: /root/.docker/config.json
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+
+- name: Install the container run script
+  ansible.builtin.template:
+    src: petclinic-app-run.sh.j2
+    dest: "{{ app_runtime_run_script }}"
+    owner: root
+    group: root
+    mode: "0755"
+    validate: bash -n %s
+  become: true
+
+- name: Install the application unit
+  ansible.builtin.template:
+    src: petclinic-app.service.j2
+    dest: /etc/systemd/system/{{ app_runtime_service_name }}.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Enable the application for the next boot
+  ansible.builtin.systemd_service:
+    name: "{{ app_runtime_service_name }}"
+    enabled: true
+    daemon_reload: true
+  become: true
+
+- name: Confirm the gcloud CLI the run script calls is present
+  ansible.builtin.stat:
+    path: "{{ app_runtime_gcloud_bin }}"
+  register: app_runtime_gcloud
+  become: true
+
+- name: Fail if the image has no gcloud CLI
+  ansible.builtin.assert:
+    that:
+      - app_runtime_gcloud.stat.exists
+      - app_runtime_gcloud.stat.executable | default(false)
+    fail_msg: >-
+      {{ app_runtime_gcloud_bin }} is missing from the image. The run script
+      needs it to read the database secrets, and an instance built without it
+      would boot, fail every health check and be replaced forever.
+    success_msg: "gcloud CLI present at {{ app_runtime_gcloud_bin }}."

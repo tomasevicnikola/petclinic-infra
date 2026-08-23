@@ -58,6 +58,17 @@
   become: true
   notify: Restart node_exporter
 
+- name: Install the bind-address wrapper
+  ansible.builtin.template:
+    src: node-exporter-start.sh.j2
+    dest: "{{ node_exporter_start_script }}"
+    owner: root
+    group: root
+    mode: "0755"
+    validate: bash -n %s
+  become: true
+  notify: Restart node_exporter
+
 - name: Install the node_exporter unit
   ansible.builtin.template:
     src: node_exporter.service.j2

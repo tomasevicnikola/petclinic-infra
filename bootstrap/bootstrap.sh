@@ -29,6 +29,8 @@ WIF_PROVIDER="github-provider"
 
 SA_TERRAFORM="sa-terraform"
 SA_CICD="sa-cicd"
+SA_PACKER="sa-packer"
+SA_PACKER_VM="sa-packer-vm"
 SA_APP_VM="sa-app-vm"
 SA_OPS_VM="sa-ops-vm"
 
@@ -177,12 +179,18 @@ ensure_sa "${SA_TERRAFORM}" "Terraform provisioner" \
   "Provisions all infrastructure from CI via Workload Identity Federation"
 ensure_sa "${SA_CICD}" "App CI/CD pipeline" \
   "Builds and pushes app images to Artifact Registry"
+ensure_sa "${SA_PACKER}" "Packer image builder" \
+  "Bakes the application VM image; creates a throwaway builder and publishes the image"
+ensure_sa "${SA_PACKER_VM}" "Packer builder VM identity" \
+  "Attached to the throwaway image builder. Holds no roles on purpose"
 ensure_sa "${SA_APP_VM}" "Application VM identity" \
   "Attached to application VMs; telemetry and image pull only"
 ensure_sa "${SA_OPS_VM}" "Ops/runner VM identity" \
   "Attached to the ops/runner VM; telemetry and image pull only"
 
 TERRAFORM_SA="$(sa_email "${SA_TERRAFORM}")"
+PACKER_SA="$(sa_email "${SA_PACKER}")"
+PACKER_VM_SA="$(sa_email "${SA_PACKER_VM}")"
 CICD_SA="$(sa_email "${SA_CICD}")"
 APP_VM_SA="$(sa_email "${SA_APP_VM}")"
 OPS_VM_SA="$(sa_email "${SA_OPS_VM}")"
@@ -200,7 +208,7 @@ TERRAFORM_ROLES=(
   "roles/artifactregistry.admin"            # create the repo and let sa-cicd push to it
   "roles/monitoring.editor"                 # alerts, dashboards, uptime checks
   "roles/servicenetworking.networksAdmin"   # VPC peering for Cloud SQL private IP
-  "roles/iap.admin"                         # IAP tunnel, so VMs need no public IP
+  "roles/iap.admin"                         # IAP settings and per-resource IAM on them
   "roles/serviceusage.serviceUsageConsumer" # bill API calls to this project
 )
 
@@ -254,7 +262,7 @@ for role in "${VM_ROLES[@]}"; do grant_project_role "${APP_VM_SA}" "${role}"; do
 OPS_CONTROLLER_ROLES=(
   "roles/compute.viewer"             # gcp_compute dynamic inventory lists the MIG instances
   "roles/iap.tunnelResourceAccessor" # open the IAP SSH tunnel; no VM has a public IP
-  "roles/compute.osAdminLogin"       # OS Login WITH sudo - app_deploy runs `become: true`
+  "roles/compute.osAdminLogin"       # SSH with sudo onto an app instance, for debugging
 )
 
 step "3d. Roles: ${SA_OPS_VM}"
@@ -267,6 +275,29 @@ gcloud iam service-accounts add-iam-policy-binding "${APP_VM_SA}" \
   --role="roles/iam.serviceAccountUser" \
   --quiet >/dev/null
 bound "roles/iam.serviceAccountUser -> ${OPS_VM_SA} (on ${APP_VM_SA} only)"
+
+step "3e. Roles: ${SA_PACKER}"
+
+# Short on purpose: the bake creates a throwaway VM and publishes an image.
+# Running it as sa-terraform would hand it secretmanager.admin and cloudsql.admin
+# for no reason.
+PACKER_ROLES=(
+  "roles/compute.instanceAdmin.v1"          # builder VM and disk, and publishing the image
+  "roles/serviceusage.serviceUsageConsumer" # bill API calls to this project
+)
+
+for role in "${PACKER_ROLES[@]}"; do
+  grant_project_role "${PACKER_SA}" "${role}"
+done
+
+# The builder VM's identity holds no roles. Not sa-app-vm: that account can read
+# the live database secrets.
+gcloud iam service-accounts add-iam-policy-binding "${PACKER_VM_SA}" \
+  --project="${PROJECT_ID}" \
+  --member="serviceAccount:${PACKER_SA}" \
+  --role="roles/iam.serviceAccountUser" \
+  --quiet >/dev/null
+bound "roles/iam.serviceAccountUser -> ${PACKER_SA} (on ${PACKER_VM_SA} only)"
 
 # ------------------------------------- 4. Workload Identity Federation -------
 
@@ -330,6 +361,7 @@ bind_repo_to_sa() {
 }
 
 bind_repo_to_sa "${INFRA_REPO}" "${TERRAFORM_SA}"
+bind_repo_to_sa "${INFRA_REPO}" "${PACKER_SA}"
 bind_repo_to_sa "${APP_REPO}"   "${CICD_SA}"
 
 # ----------------------------------------------------------- 5. output ------

@@ -6,6 +6,7 @@ on:
       - "envs/**"
       - "modules/**"
       - "ansible/**"
+      - "packer/**"
       - ".tflint.hcl"
       - "trivy.yaml"
       - ".github/workflows/**"
@@ -25,6 +26,7 @@ env:
   TRIVY_SHA256: "2edd39da482bb4e9831962487b68f68e3928ec3137794757f54d00383d79547b"
   ANSIBLE_CORE_VERSION: "2.21.1"
   ANSIBLE_LINT_VERSION: "26.4.0"
+  PACKER_VERSION: "1.15.4"
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform.d/plugin-cache
@@ -138,6 +140,33 @@ jobs:
           tar xzf trivy.tar.gz trivy
           ./trivy config .
 
+  packer-validate:
+    name: packer validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # v3
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: packer fmt
+        working-directory: packer
+        run: packer fmt -check -diff .
+
+      - name: packer init
+        working-directory: packer
+        run: packer init .
+
+      - name: packer validate
+        working-directory: packer
+        run: packer validate .
+
   # Static analysis of the Ansible tree, on a GitHub-hosted runner. It reads
   # files and nothing else - no GCP credentials, no VPC, no inventory.
   #
@@ -193,7 +222,7 @@ jobs:
     name: plan
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [fmt, validate, tflint, actionlint, scan]
+    needs: [fmt, validate, tflint, actionlint, scan, packer-validate]
 
     if: github.event.pull_request.head.repo.full_name == github.repository
 
