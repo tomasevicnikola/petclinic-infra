@@ -143,11 +143,12 @@ jobs:
             echo
             echo "Published to family \`petclinic-app\`. Nothing is running it yet."
             echo
-            echo "The instance template tracks the family, so the next \`terraform apply\`"
-            echo "replaces the template and the group rolls onto this image. To ship it now:"
+            echo "One family serves every environment. Each environment's instance"
+            echo "template tracks it, so the next \`terraform apply\` there rolls onto"
+            echo "this image. To ship it now:"
             echo
             echo '```sh'
-            echo "gh workflow run terraform-apply.yml -R ${GITHUB_REPOSITORY} -f environment=dev"
+            echo "gh workflow run terraform-apply.yml -R ${GITHUB_REPOSITORY} -f environment=dev   # or qa"
             echo '```'
             echo
             echo "To pin it instead of tracking the family, set \`app_image\` to:"

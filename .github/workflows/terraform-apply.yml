@@ -8,8 +8,15 @@ on:
         type: choice
         options:
           - dev
+          - qa
+          - prod
         default: dev
         required: true
+      app_image_digest:
+        description: "Container digest to deploy, e.g. sha256:... Leave empty to use the environment's recorded digest. Required the first time an environment is brought up, since it has none yet."
+        type: string
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -26,10 +33,35 @@ env:
   WIF_SERVICE_ACCOUNT: sa-terraform@petclinic-capstone.iam.gserviceaccount.com
 
 jobs:
+  guard:
+    name: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: prod applies need ALLOW_PROD_APPLY
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          ALLOW_PROD_APPLY: ${{ vars.ALLOW_PROD_APPLY }}
+        run: |
+          if [ "$ENVIRONMENT" != "prod" ]; then
+            echo "Environment is '${ENVIRONMENT}'; the prod guard does not apply."
+            exit 0
+          fi
+
+          if [ "${ALLOW_PROD_APPLY:-}" = "true" ]; then
+            echo "::warning::ALLOW_PROD_APPLY is true. Proceeding with a prod apply - this creates real, billable infrastructure."
+            exit 0
+          fi
+
+          echo "::error::Refusing to apply prod. envs/prod has never been applied - see docs/environments.md. To override, set the ALLOW_PROD_APPLY repository variable to exactly \"true\". It is currently \"${ALLOW_PROD_APPLY:-<unset>}\"."
+          exit 1
+
   plan:
     name: plan ${{ inputs.environment }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: guard
     permissions:
       contents: read
       id-token: write
@@ -66,6 +98,7 @@ jobs:
         env:
           TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS }}
           TF_VAR_iap_oauth_client_secret: ${{ secrets.IAP_OAUTH_CLIENT_SECRET }}
+          TF_VAR_app_image_digest: ${{ inputs.app_image_digest }}
         run: terraform plan -no-color -lock-timeout=5m -out=tfplan
 
       - name: render plan
@@ -84,7 +117,7 @@ jobs:
     name: apply ${{ inputs.environment }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: plan
+    needs: [guard, plan]
 
     environment: ${{ inputs.environment }}
 
@@ -125,4 +158,5 @@ jobs:
         env:
           TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS }}
           TF_VAR_iap_oauth_client_secret: ${{ secrets.IAP_OAUTH_CLIENT_SECRET }}
+          TF_VAR_app_image_digest: ${{ inputs.app_image_digest }}
         run: terraform apply -no-color -lock-timeout=5m -auto-approve
