@@ -1,0 +1,17 @@
+---
+ansible_connection: "{{ 'local' if inventory_hostname == lookup('pipe', 'hostname -s') else 'ssh' }}"
+
+ansible_user: >-
+  {{ (lookup('env', 'OSLOGIN_USER')
+      or lookup('pipe', "gcloud compute os-login describe-profile --format='value(posixAccounts[0].username)'"))
+     if ansible_connection == 'ssh'
+     else lookup('env', 'USER') }}
+
+ansible_ssh_private_key_file: ~/.ssh/google_compute_engine
+
+ansible_ssh_common_args: >-
+  -o ProxyCommand="gcloud compute start-iap-tunnel {{ inventory_hostname }} %p
+  --listen-on-stdin --project={{ gcp_project }} --zone={{ gcp_zone }}
+  --verbosity=warning"
+
+ansible_python_interpreter: /usr/bin/python3

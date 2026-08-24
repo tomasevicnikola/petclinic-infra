@@ -15,7 +15,7 @@ auth_kind: application
 # environment, so a tag-only inventory would return every environment's hosts.
 filters:
   - status = RUNNING
-  - name = petclinic-dev-*
+  - name = petclinic-qa-*
 
 hostnames:
   - name
