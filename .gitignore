@@ -19,6 +19,8 @@ tfplan
 *.tfvars
 *.tfvars.json
 !*.auto.tfvars.example
+# Exception: per-environment sizing only. Secrets arrive as TF_VAR_*.
+!envs/*/env.auto.tfvars
 
 # Credentials
 # CI uses Workload Identity Federation, so these shouldn't exist at all.
