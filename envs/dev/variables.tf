@@ -1,253 +1,134 @@
 variable "project_id" {
-  description = "GCP project that owns every resource in this environment."
+  description = "GCP project that owns this environment."
   type        = string
   default     = "petclinic-capstone"
 }
 
 variable "region" {
-  description = "Default region for regional resources."
+  description = "Region for regional resources."
   type        = string
   default     = "europe-west3"
 }
 
 variable "zone" {
-  description = "Default zone for zonal resources."
+  description = "Zone for zonal resources."
   type        = string
   default     = "europe-west3-a"
 }
 
-variable "network_name" {
-  description = "Name of the dev VPC."
+variable "environment" {
+  description = "Which environment this directory is."
   type        = string
-  default     = "petclinic-dev-vpc"
-}
-
-variable "subnet_name" {
-  description = "Name of the dev subnet."
-  type        = string
-  default     = "petclinic-dev-subnet"
 }
 
 variable "subnet_cidr" {
-  description = "Primary IPv4 range of the dev subnet."
+  description = "Primary IPv4 range of this environment's subnet."
   type        = string
-  default     = "10.10.0.0/24"
-
-  validation {
-    condition     = can(cidrhost(var.subnet_cidr, 0))
-    error_message = "subnet_cidr must be a valid IPv4 CIDR block."
-  }
 }
 
 variable "psa_cidr" {
-  description = "Range reserved for Private Service Access peering in dev."
+  description = "Range reserved for Private Service Access peering."
   type        = string
-  default     = "10.20.0.0/16"
-
-  validation {
-    condition     = can(regex("^([0-9]{1,3}\\.){3}[0-9]{1,3}/(1[6-9]|2[0-4])$", var.psa_cidr)) && can(cidrhost(var.psa_cidr, 0))
-    error_message = "psa_cidr must be a valid IPv4 CIDR with a prefix between /16 and /24."
-  }
 }
 
-variable "ops_vm_name" {
-  description = "Name of the dev ops instance."
-  type        = string
-  default     = "petclinic-dev-ops"
+variable "create_ops_vm" {
+  description = "Whether this environment creates the shared ops VM."
+  type        = bool
 }
 
-variable "db_instance_name" {
-  description = "Name of the dev Cloud SQL instance. Cloud SQL holds a deleted name for about a week, so recreating needs a new one."
-  type        = string
-  default     = "petclinic-dev-mysql"
-}
-
-variable "db_name" {
-  description = "Application database on the dev instance."
-  type        = string
-  default     = "petclinic"
-}
-
-variable "db_app_user" {
-  description = "MySQL user the application connects as in dev."
-  type        = string
-  default     = "petclinic"
-}
-
-variable "db_password_version" {
-  description = "Bump to rotate the dev database password. The MySQL user and the secret change together in one apply."
-  type        = number
-  default     = 1
+variable "create_artifact_registry" {
+  description = "Whether this environment creates the shared image repository."
+  type        = bool
 }
 
 variable "db_tier" {
-  description = "Machine tier of the dev instance."
+  description = "Cloud SQL machine tier."
   type        = string
-  default     = "db-g1-small"
 }
 
 variable "db_availability_type" {
-  description = "ZONAL in dev. Prod would be REGIONAL."
+  description = "ZONAL or REGIONAL."
   type        = string
-  default     = "ZONAL"
 }
 
 variable "db_deletion_protection" {
-  description = "Deletion protection on the dev database, in Terraform and in the API. Tearing dev down means setting this to false, applying, and then destroying."
+  description = "Deletion protection on the database."
   type        = bool
-  default     = true
 }
 
-variable "db_secret_prefix" {
-  description = "Prefix of the dev database secrets: dev-db-app-password and dev-db-app-config."
-  type        = string
-  default     = "dev-db-app"
+variable "db_retained_backups" {
+  description = "Number of automatic backups kept."
+  type        = number
 }
 
-variable "lb_name_prefix" {
-  description = "Prefix for the load balancer, its IP, policy, proxies and forwarding rules."
-  type        = string
-  default     = "petclinic-dev-lb"
+variable "db_transaction_log_retention_days" {
+  description = "Days of binary log kept for point-in-time recovery."
+  type        = number
 }
 
-variable "lb_allowed_members" {
-  description = "Identities IAP admits to the dev load balancer, as IAM members. No default on purpose: this is the whole access control list, and the resources are per-member, so a value that merely looks safe is not safe. ['user:nobody@example.com'] would not fail closed - it would delete the grants that exist and lock the environment out of itself. An unset variable has to stop the run instead, which is what having no default does."
-  type        = list(string)
-}
-
-variable "iap_oauth_client_id" {
-  description = "OAuth 2.0 client IAP authenticates against, created by hand in the console. Not a secret, so it is committed rather than passed in out-of-band."
-  type        = string
-  default     = "923128095631-v96nc3sies5njkaghoublmacb74nmesr.apps.googleusercontent.com"
-}
-
-variable "iap_oauth_client_secret" {
-  description = "Secret of iap_oauth_client_id, supplied as TF_VAR_iap_oauth_client_secret from the IAP_OAUTH_CLIENT_SECRET Actions secret. Persisted in the state file - see modules/load-balancer/README.md."
-  type        = string
-  sensitive   = true
-}
-
-variable "iap_oauth_client_secret_version" {
-  description = "Bump together with a rotation of the client secret in the console."
+variable "db_password_version" {
+  description = "Bump to rotate the database password."
   type        = number
   default     = 1
 }
 
-variable "lb_domain" {
-  description = "Domain for a managed certificate. Null while no domain exists, which makes the module issue a self-signed one."
-  type        = string
-  default     = null
-}
-
-variable "app_port" {
-  description = "Port the application listens on. One value for the whole environment: the firewall opens it to health checkers and the group publishes it as its named port, so they cannot drift apart."
-  type        = number
-  default     = 8080
-}
-
-variable "app_name_prefix" {
-  description = "Prefix for the application group, its template, health check and autoscaler."
-  type        = string
-  default     = "petclinic-dev-app"
-}
-
 variable "app_machine_type" {
-  description = "Machine type of the application instances. e2-medium, not e2-small: shared-core burst credits make cpu_utilization non-linear, so an autoscaler reading that metric is miscalibrated whatever else is true."
+  description = "Machine type of the application instances."
   type        = string
-  default     = "e2-medium"
+}
+
+variable "app_min_replicas" {
+  description = "Autoscaler floor."
+  type        = number
+}
+
+variable "app_max_replicas" {
+  description = "Autoscaler ceiling."
+  type        = number
 }
 
 variable "app_image" {
-  description = "Image the application instances boot from. Null tracks the petclinic-app family, so the newest bake is picked up by the next replace. Set an exact image self link to pin one, for a reproducible rollback."
+  description = "Exact image self link to pin, or null to track the petclinic-app family."
   type        = string
   default     = null
 }
 
 variable "app_image_digest" {
-  description = "Overrides the deployed container digest instead of reading it from the state bucket. Empty means read the object, which is the normal path; a value here is for breaking glass when the object is wrong or missing."
+  description = "Container digest to deploy. Empty reads deploy/<environment>/app-image-digest."
   type        = string
   default     = ""
-
-  validation {
-    condition     = var.app_image_digest == "" || can(regex("^sha256:[0-9a-f]{64}$", var.app_image_digest))
-    error_message = "app_image_digest must be empty or a sha256 digest."
-  }
-}
-
-variable "deploy_state_bucket" {
-  description = "Bucket holding the deployed-digest pointer. The Terraform state bucket: the deployed version is state, it has exactly the same access boundary, and a second bucket would only be a second thing to secure."
-  type        = string
-  default     = "petclinic-capstone-tfstate"
-}
-
-variable "app_min_replicas" {
-  description = "Smallest the dev group scales to."
-  type        = number
-  default     = 2
-}
-
-variable "app_max_replicas" {
-  description = "Largest the dev group scales to, and the cost stop."
-  type        = number
-  default     = 4
-}
-
-variable "app_cpu_target" {
-  description = "Average CPU the autoscaler holds across the dev group."
-  type        = number
-  default     = 0.6
-}
-
-variable "app_enable_autohealing" {
-  description = "Autohealing on the dev group. On since instances boot from a baked image and start serving without any Ansible run - the empty-instance problem that kept this off is gone."
-  type        = bool
-  default     = true
-}
-
-variable "env_prefix" {
-  description = "Prefix of the cross-cutting dev secrets: dev-ansible-vault-password."
-  type        = string
-  default     = "dev"
 }
 
 variable "vault_deletion_protection" {
-  description = "Deletion protection on the Ansible Vault password secret. Tearing dev down means setting this to false, applying, and then destroying."
+  description = "Deletion protection on the Ansible Vault password secret."
   type        = bool
-  default     = true
 }
 
 variable "vault_password_version" {
-  description = "Bump to rotate the dev Ansible Vault password. Re-key everything encrypted with the old one first."
+  description = "Bump to rotate the Ansible Vault password."
   type        = number
   default     = 1
 }
 
-variable "registry_repository_id" {
-  description = "Name of the dev Docker repository, and the last segment of the registry URL the app pipeline tags against."
+variable "lb_allowed_members" {
+  description = "Identities IAP admits, as IAM members. Supplied as TF_VAR_lb_allowed_members."
+  type        = list(string)
+}
+
+variable "lb_domain" {
+  description = "Domain for a managed certificate, or null for a self-signed one."
   type        = string
-  default     = "petclinic"
+  default     = null
 }
 
-variable "registry_keep_recent_count" {
-  description = "How many of the most recent dev versions survive the cleanup policy regardless of age, tagged or not. Bounds how far back a rollback can reach."
+variable "iap_oauth_client_secret" {
+  description = "Secret of the shared IAP OAuth client. Supplied as TF_VAR_iap_oauth_client_secret."
+  type        = string
+  sensitive   = true
+}
+
+variable "iap_oauth_client_secret_version" {
+  description = "Bump after rotating the client secret in the console."
   type        = number
-  default     = 10
-}
-
-variable "registry_cleanup_dry_run" {
-  description = "Runs the dev cleanup policies without deleting anything, logging what they would have removed. True is how a policy change gets checked before it is trusted with images."
-  type        = bool
-  default     = false
-}
-
-variable "registry_untagged_retention_days" {
-  description = "How long untagged dev images live. Leftovers from failed or superseded builds, referenced by nothing."
-  type        = number
-  default     = 7
-}
-
-variable "registry_tagged_retention_days" {
-  description = "How long a tagged dev image lives once it falls out of the most recent registry_keep_recent_count."
-  type        = number
-  default     = 30
+  default     = 1
 }
