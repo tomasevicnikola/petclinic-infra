@@ -6,8 +6,7 @@ builds the machines; nothing here creates infrastructure.
 
 ## When each role runs
 
-Two phases. Which one a role belongs to is the thing to know before editing it —
-see [
+Two phases. Which one a role belongs to is the thing to know before editing it.
 
 | Role | Bake | Ops VM | Notes |
 | --- | :-: | :-: | --- |
@@ -26,6 +25,29 @@ from it, so this is how they are configured: at build time, not after boot.
 Nothing configures a running application instance. Deploying a version does not
 touch them either — it replaces them. See the application repository's
 `deploy.yml`.
+
+## Inventories
+
+One per environment, each scoped to its own hosts by name.
+
+| Inventory | Targets | Groups | Used by |
+| --- | --- | --- | --- |
+| `inventories/dev` | `petclinic-dev-*` | `ops`, `app`, `ssh_iap` | `playbooks/ops.yml` |
+| `inventories/qa` | `petclinic-qa-*` | `app`, `ssh_iap` | nothing |
+
+`ansible.cfg` defaults to `inventories/dev`. Target another with `-i`:
+
+```sh
+ansible-inventory -i inventories/qa/gcp.yml --graph
+```
+
+qa has no ops VM and its application instances configure themselves at boot, so
+no playbook runs against it. The name filter matters because the `app` and `ops`
+network tags are per-VPC and identical in every environment.
+
+Only `inventories/dev` has a `group_vars/all/vault.yml`; qa has nothing to
+decrypt. `scripts/fetch-vault-pass.sh` reads `<env>-ansible-vault-password` and
+resolves the environment from `ANSIBLE_ENV`, defaulting to `dev`.
 
 ## Running it
 

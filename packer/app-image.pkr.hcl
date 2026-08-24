@@ -21,6 +21,8 @@ variable "zone" {
   default = "europe-west3-a"
 }
 
+# Where the builder VM runs, not where the image is used. The image is
+# environment-agnostic; app-env metadata decides that at boot.
 variable "subnetwork" {
   type    = string
   default = "petclinic-dev-subnet"

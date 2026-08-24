@@ -1,18 +1,29 @@
 # Secrets
 
-Every secret in the dev project. Service accounts are short for
+Every secret in the project. Service accounts are short for
 `<name>@petclinic-capstone.iam.gserviceaccount.com`, and every secret is
 replicated to `europe-west3` only.
 
+Secret ids are prefixed with the environment. The prefix comes from
+`var.environment` in `envs/_stack`, and the application instances derive the same
+names from their `app-env` metadata at boot. `<env>` is `dev`, `qa` or `prod`;
+only dev's exist today.
+
 | Secret | What it is | Created by | Who reads it | Rotation |
 | --- | --- | --- | --- | --- |
-| `dev-db-app-password` | Password of the `petclinic` MySQL user | `cloudsql` | `sa-app-vm`, `secretAccessor` via `app_password_accessor` | Bump `db_password_version` and apply |
-| `dev-db-app-config` | Host, port, database and user as JSON, no password | `cloudsql` | `sa-app-vm`, `secretAccessor` via `app_config_accessor` | Follows the instance |
-| `dev-grafana-admin-password` | Grafana admin login | `secrets` | Nobody yet; the binding comes with the monitoring stack | Bump `grafana_password_version` and apply |
-| `dev-ansible-vault-password` | Opens the `ansible-vault` files | `secrets` | `sa-ops-vm`, `secretAccessor` via `ansible_vault_accessor` | Rekey the files first, then bump `vault_password_version` |
-| `dev-iap-oauth-client-secret` | Secret of the custom OAuth client IAP authenticates against | `secrets` | Nobody at run time; durable copy only | Rotate in the console, then bump `iap_oauth_client_secret_version` |
+| `<env>-db-app-password` | Password of the `petclinic` MySQL user | `cloudsql` | `sa-app-vm` via `app_password_accessor` | Bump `db_password_version` and apply |
+| `<env>-db-app-config` | Host, port, database and user as JSON, no password | `cloudsql` | `sa-app-vm` via `app_config_accessor` | Follows the instance |
+| `<env>-ansible-vault-password` | Opens the `ansible-vault` files | `secrets` | `sa-ops-vm` via `ansible_vault_accessor` | Rekey the files, then bump `vault_password_version` |
+| `<env>-iap-oauth-client-secret` | Secret of the OAuth client IAP authenticates against | `secrets` | Nobody at run time | Rotate in the console, then bump `iap_oauth_client_secret_version` |
 
-Bindings are per secret, so an account that reads one cannot list the others.
+All four exist in every environment. Deletion protection on
+`<env>-ansible-vault-password` is on in dev and prod, off in qa.
+
+`scripts/fetch-vault-pass.sh` picks which one to read: `VAULT_SECRET_ID`, then a
+positional argument, then `ANSIBLE_ENV`, then `dev`.
+
+Bindings are per secret and per environment, so `sa-app-vm` reading
+`qa-db-app-password` is a grant a qa apply created and a qa destroy removes.
 `sa-terraform` sees everything because it creates them; `sa-cicd` holds nothing.
 
 The IAP client secret has no reader: the load balancer takes it as a variable
@@ -20,9 +31,8 @@ and the deploy pipeline needs only the client id. It is also the one secret that
 does not stay out of the state file, because the attribute that consumes it is
 not write-only.
 
-The vault password is deletion protected and its old versions are disabled
-rather than destroyed. It is the only copy, and the files encrypted with it
-outlive any teardown.
+The vault password's old versions are disabled rather than destroyed. It is the
+only copy, and the files encrypted with it outlive any teardown.
 
 There is no runner token secret. Registration tokens last about an hour and are
 single-use, so a stored one is expired before anything can read it. The runner
