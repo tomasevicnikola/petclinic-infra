@@ -50,12 +50,47 @@ jobs:
           terraform_wrapper: false
       - run: terraform fmt -check -recursive -diff
 
+      - name: the environment roots must be identical
+        run: |
+          FAILED=0
+
+          for f in versions.tf providers.tf variables.tf main.tf outputs.tf; do
+            for e in qa prod; do
+              if ! diff -q "envs/dev/${f}" "envs/${e}/${f}" >/dev/null; then
+                echo "::error file=envs/${e}/${f}::differs from envs/dev/${f} - environments may differ only in backend.tf and env.auto.tfvars"
+                diff -u "envs/dev/${f}" "envs/${e}/${f}" || true
+                FAILED=1
+              fi
+            done
+          done
+
+          for e in dev qa prod; do
+            EXPECTED="backend.tf main.tf outputs.tf providers.tf variables.tf versions.tf"
+            if [ "$e" = "dev" ]; then
+              EXPECTED="${EXPECTED} moved.tf"
+            fi
+            EXPECTED="$(echo "$EXPECTED" | tr ' ' '\n' | sort | tr '\n' ' ')"
+            ACTUAL="$(cd "envs/${e}" && for x in *.tf; do echo "$x"; done | sort | tr '\n' ' ')"
+            if [ "$EXPECTED" != "$ACTUAL" ]; then
+              echo "::error::envs/${e} has an unexpected set of .tf files."
+              echo "  expected: ${EXPECTED}"
+              echo "  actual:   ${ACTUAL}"
+              FAILED=1
+            fi
+          done
+
+          exit "$FAILED"
+
   validate:
-    name: validate
+    name: validate ${{ matrix.environment }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, qa, prod]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -72,13 +107,13 @@ jobs:
           restore-keys: tf-providers-${{ runner.os }}-
 
       - name: terraform init
-        working-directory: envs/dev
+        working-directory: envs/${{ matrix.environment }}
         run: |
           mkdir -p "$TF_PLUGIN_CACHE_DIR"
           terraform init -backend=false -lockfile=readonly
 
       - name: terraform validate
-        working-directory: envs/dev
+        working-directory: envs/${{ matrix.environment }}
         run: terraform validate
 
   tflint:
@@ -191,16 +226,24 @@ jobs:
       # something: committing the vault file after decrypting it locally.
       - name: refuse a decrypted vault file
         run: |
-          FILE=ansible/inventories/dev/group_vars/all/vault.yml
-          if [ ! -f "$FILE" ]; then
-            echo "::error::${FILE} is missing from the checkout"
+          DEV_FILE=ansible/inventories/dev/group_vars/all/vault.yml
+          if [ ! -f "$DEV_FILE" ]; then
+            echo "::error::${DEV_FILE} is missing from the checkout"
             exit 1
           fi
-          # shellcheck disable=SC2016  # $ANSIBLE_VAULT is a literal file header
-          if ! head -n1 "$FILE" | grep -q '^\$ANSIBLE_VAULT'; then
-            echo "::error file=${FILE}::not encrypted - re-encrypt with ansible-vault before committing"
-            exit 1
-          fi
+
+          FAILED=0
+          for FILE in ansible/inventories/*/group_vars/all/vault.yml; do
+            [ -f "$FILE" ] || continue
+            # shellcheck disable=SC2016  # $ANSIBLE_VAULT is a literal file header
+            if head -n1 "$FILE" | grep -q '^\$ANSIBLE_VAULT'; then
+              echo "encrypted: ${FILE}"
+            else
+              echo "::error file=${FILE}::not encrypted - re-encrypt with ansible-vault before committing"
+              FAILED=1
+            fi
+          done
+          exit "$FAILED"
 
       - name: install ansible-lint
         run: |
@@ -218,13 +261,62 @@ jobs:
           echo 'lint-does-not-decrypt' > "$ANSIBLE_VAULT_PASSWORD_FILE"
           ../.venv/bin/ansible-lint --offline
 
+  # Shared code plans every environment; envs/<env>/ plans only that one.
+  changed:
+    name: which environments to plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      envs: ${{ steps.pick.outputs.envs }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: pick the environments
+        id: pick
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          FILES="$(git diff --name-only "${BASE}...${HEAD}")"
+
+          echo "::group::Changed files"
+          echo "$FILES"
+          echo "::endgroup::"
+
+          if echo "$FILES" | grep -qE '^(envs/_stack/|modules/|\.github/workflows/|\.tflint\.hcl$|trivy\.yaml$)'; then
+            ENVS='["dev","qa","prod"]'
+            REASON="shared code changed"
+          else
+            ENVS="$(
+              for e in dev qa prod; do
+                if echo "$FILES" | grep -q "^envs/${e}/"; then echo "$e"; fi
+              done | jq -Rsc 'split("\n") | map(select(length > 0))'
+            )"
+            REASON="per-environment change"
+          fi
+
+          echo "envs=${ENVS}" >> "$GITHUB_OUTPUT"
+          echo "::notice::Planning ${ENVS} (${REASON})."
+
   plan:
-    name: plan
+    name: plan ${{ matrix.environment }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [fmt, validate, tflint, actionlint, scan, packer-validate]
+    needs: [fmt, validate, tflint, actionlint, scan, packer-validate, changed]
 
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && needs.changed.outputs.envs != '[]'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJSON(needs.changed.outputs.envs) }}
 
     permissions:
       contents: read
@@ -243,7 +335,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ env.TF_PLUGIN_CACHE_DIR }}
-          key: tf-providers-${{ runner.os }}-${{ hashFiles('envs/dev/.terraform.lock.hcl') }}
+          key: tf-providers-${{ runner.os }}-${{ hashFiles(format('envs/{0}/.terraform.lock.hcl', matrix.environment)) }}
           restore-keys: tf-providers-${{ runner.os }}-
 
       - name: authenticate to gcp
@@ -252,18 +344,38 @@ jobs:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
 
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      # An environment that has never deployed has no digest object to read.
+      - name: resolve a digest to plan against
+        id: digest
+        env:
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          BUCKET=petclinic-capstone-tfstate
+
+          if gcloud storage cat "gs://${BUCKET}/deploy/${ENVIRONMENT}/app-image-digest" >/dev/null 2>&1; then
+            echo "digest=" >> "$GITHUB_OUTPUT"
+            echo "${ENVIRONMENT} has a recorded digest; planning against it."
+          else
+            DIGEST="$(gcloud storage cat "gs://${BUCKET}/deploy/dev/app-image-digest" | tr -d '[:space:]')"
+            echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+            echo "::notice::${ENVIRONMENT} has never deployed. Planning against dev's digest ${DIGEST} so the template renders."
+          fi
+
       - name: terraform init
-        working-directory: envs/dev
+        working-directory: envs/${{ matrix.environment }}
         run: |
           mkdir -p "$TF_PLUGIN_CACHE_DIR"
           terraform init -lockfile=readonly
 
       - name: terraform plan
         id: plan
-        working-directory: envs/dev
+        working-directory: envs/${{ matrix.environment }}
         env:
           TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS }}
           TF_VAR_iap_oauth_client_secret: ${{ secrets.IAP_OAUTH_CLIENT_SECRET }}
+          TF_VAR_app_image_digest: ${{ steps.digest.outputs.digest }}
         run: |
           set +e
           terraform plan -no-color -lock-timeout=5m -detailed-exitcode -out=tfplan
@@ -274,26 +386,39 @@ jobs:
 
       - name: render plan
         if: steps.plan.outputs.exitcode == '0' || steps.plan.outputs.exitcode == '2'
-        working-directory: envs/dev
+        working-directory: envs/${{ matrix.environment }}
         run: terraform show -no-color tfplan > plan.txt
 
       - name: build pr comment
         env:
           CODE: ${{ steps.plan.outputs.exitcode }}
+          ENVIRONMENT: ${{ matrix.environment }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        working-directory: envs/dev
+        working-directory: envs/${{ matrix.environment }}
         run: |
           LIMIT=50000
 
+          MOVES_ONLY=no
+          if [ "$CODE" = "2" ] && [ -f plan.txt ] \
+             && grep -q '^Plan: 0 to add, 0 to change, 0 to destroy\.$' plan.txt \
+             && grep -q 'has moved to' plan.txt; then
+            MOVES_ONLY=yes
+          fi
+
           case "$CODE" in
             0) HEADER="**No changes.** Infrastructure matches the configuration." ;;
-            2) HEADER="**Changes planned.** Review the diff below before applying." ;;
+            2) if [ "$MOVES_ONLY" = "yes" ]; then
+                 COUNT=$(grep -c 'has moved to' plan.txt)
+                 HEADER="**Address moves only.** ${COUNT} resources move to new state addresses; \`0 to add, 0 to change, 0 to destroy\`. Nothing about the infrastructure changes."
+               else
+                 HEADER="**Changes planned.** Review the diff below before applying."
+               fi ;;
             *) HEADER="**Plan failed.** See the job log." ;;
           esac
 
           {
-            echo "<!-- terraform-plan:envs/dev -->"
-            echo "### Terraform plan — \`envs/dev\`"
+            echo "<!-- terraform-plan:envs/${ENVIRONMENT} -->"
+            echo "### Terraform plan — \`envs/${ENVIRONMENT}\`"
             echo
             echo "$HEADER"
             echo
@@ -326,16 +451,16 @@ jobs:
         if: steps.plan.outputs.exitcode == '0' || steps.plan.outputs.exitcode == '2'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: plan-dev
-          path: envs/dev/plan.txt
+          name: plan-${{ matrix.environment }}
+          path: envs/${{ matrix.environment }}/plan.txt
           retention-days: 5
           if-no-files-found: error
 
       - name: upload pr comment body
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: plan-comment
-          path: envs/dev/comment.md
+          name: plan-comment-${{ matrix.environment }}
+          path: envs/${{ matrix.environment }}/comment.md
           retention-days: 5
           if-no-files-found: error
 
@@ -344,11 +469,17 @@ jobs:
         run: exit 1
 
   comment:
-    name: comment plan on pr
+    name: comment plan on pr (${{ matrix.environment }})
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: plan
+    needs: [changed, plan]
     if: ${{ !cancelled() && needs.plan.result != 'skipped' }}
+
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        environment: ${{ fromJSON(needs.changed.outputs.envs) }}
 
     permissions:
       pull-requests: write
@@ -357,21 +488,22 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         continue-on-error: true
         with:
-          name: plan-comment
+          name: plan-comment-${{ matrix.environment }}
 
       - name: upsert sticky comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
+          ENVIRONMENT: ${{ matrix.environment }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          MARKER='<!-- terraform-plan:envs/dev -->'
+          MARKER="<!-- terraform-plan:envs/${ENVIRONMENT} -->"
 
           if [ ! -f comment.md ]; then
             {
               echo "$MARKER"
-              echo "### Terraform plan — \`envs/dev\`"
+              echo "### Terraform plan — \`envs/${ENVIRONMENT}\`"
               echo
               echo "**Plan job failed before it produced a plan.** See the job log."
               echo

@@ -8,6 +8,8 @@ on:
         type: choice
         options:
           - dev
+          - qa
+          - prod
         default: dev
         required: true
       confirm:
@@ -30,10 +32,35 @@ env:
   WIF_SERVICE_ACCOUNT: sa-terraform@petclinic-capstone.iam.gserviceaccount.com
 
 jobs:
+  guard:
+    name: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: prod needs ALLOW_PROD_APPLY
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          ALLOW_PROD_APPLY: ${{ vars.ALLOW_PROD_APPLY }}
+        run: |
+          if [ "$ENVIRONMENT" != "prod" ]; then
+            echo "Environment is '${ENVIRONMENT}'; the prod guard does not apply."
+            exit 0
+          fi
+
+          if [ "${ALLOW_PROD_APPLY:-}" = "true" ]; then
+            echo "::warning::ALLOW_PROD_APPLY is true. Proceeding with a prod destroy."
+            exit 0
+          fi
+
+          echo "::error::Refusing to touch prod. envs/prod has never been applied - see docs/environments.md. To override, set ALLOW_PROD_APPLY to exactly \"true\". It is currently \"${ALLOW_PROD_APPLY:-<unset>}\"."
+          exit 1
+
   plan:
     name: plan destroy ${{ inputs.environment }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: guard
     permissions:
       contents: read
       id-token: write
@@ -69,6 +96,24 @@ jobs:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
 
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      # A destroy plan still evaluates the digest data source.
+      - name: resolve a digest so the destroy plan can evaluate
+        id: digest
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          BUCKET=petclinic-capstone-tfstate
+
+          if gcloud storage cat "gs://${BUCKET}/deploy/${ENVIRONMENT}/app-image-digest" >/dev/null 2>&1; then
+            echo "digest=" >> "$GITHUB_OUTPUT"
+            echo "${ENVIRONMENT} has a recorded digest; the data source will read it."
+          else
+            echo "digest=sha256:0000000000000000000000000000000000000000000000000000000000000000" >> "$GITHUB_OUTPUT"
+            echo "::notice::${ENVIRONMENT} has no recorded digest. Passing a placeholder so the data source is skipped - this is a destroy, nothing will run it."
+          fi
+
       - name: terraform init
         working-directory: envs/${{ inputs.environment }}
         run: |
@@ -80,6 +125,7 @@ jobs:
         env:
           TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS }}
           TF_VAR_iap_oauth_client_secret: ${{ secrets.IAP_OAUTH_CLIENT_SECRET }}
+          TF_VAR_app_image_digest: ${{ steps.digest.outputs.digest }}
         run: terraform plan -destroy -no-color -lock-timeout=5m -out=tfplan
 
       - name: render destroy plan
@@ -98,7 +144,7 @@ jobs:
     name: destroy ${{ inputs.environment }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: plan
+    needs: [guard, plan]
 
     environment: ${{ inputs.environment }}
 
@@ -128,6 +174,24 @@ jobs:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
 
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      # A destroy plan still evaluates the digest data source.
+      - name: resolve a digest so the destroy plan can evaluate
+        id: digest
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          BUCKET=petclinic-capstone-tfstate
+
+          if gcloud storage cat "gs://${BUCKET}/deploy/${ENVIRONMENT}/app-image-digest" >/dev/null 2>&1; then
+            echo "digest=" >> "$GITHUB_OUTPUT"
+            echo "${ENVIRONMENT} has a recorded digest; the data source will read it."
+          else
+            echo "digest=sha256:0000000000000000000000000000000000000000000000000000000000000000" >> "$GITHUB_OUTPUT"
+            echo "::notice::${ENVIRONMENT} has no recorded digest. Passing a placeholder so the data source is skipped - this is a destroy, nothing will run it."
+          fi
+
       - name: terraform init
         working-directory: envs/${{ inputs.environment }}
         run: |
@@ -139,4 +203,5 @@ jobs:
         env:
           TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS }}
           TF_VAR_iap_oauth_client_secret: ${{ secrets.IAP_OAUTH_CLIENT_SECRET }}
+          TF_VAR_app_image_digest: ${{ steps.digest.outputs.digest }}
         run: terraform destroy -no-color -lock-timeout=5m -auto-approve
