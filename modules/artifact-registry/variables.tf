@@ -57,15 +57,21 @@ variable "untagged_retention_days" {
   }
 }
 
-variable "tagged_retention_days" {
-  description = "How long a tagged image lives once it falls outside the most recent keep_recent_count. These are per-PR builds, not releases."
+variable "pr_retention_days" {
+  description = "How long a pull-request build lives once it falls outside the most recent keep_recent_count. Release tags are not covered by any delete rule."
   type        = number
-  default     = 30
+  default     = 14
 
   validation {
-    condition     = var.tagged_retention_days >= 1
-    error_message = "tagged_retention_days must be at least 1."
+    condition     = var.pr_retention_days >= 1
+    error_message = "pr_retention_days must be at least 1."
   }
+}
+
+variable "pr_tag_prefixes" {
+  description = "Tag prefixes the pull-request cleanup rule matches. Anything outside these prefixes, releases included, is never deleted by age."
+  type        = list(string)
+  default     = ["sha-"]
 }
 
 variable "cleanup_dry_run" {

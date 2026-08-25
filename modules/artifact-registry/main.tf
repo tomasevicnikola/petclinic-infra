@@ -46,13 +46,17 @@ resource "google_artifact_registry_repository" "this" {
     }
   }
 
+  # Scoped to the pull-request builds by tag prefix. Release tags deliberately
+  # have no delete rule: an image some environment is running must not vanish,
+  # because instances pull it by digest and a replacement would fail to start.
   cleanup_policies {
-    id     = "delete-old-tagged"
+    id     = "delete-pr-builds"
     action = "DELETE"
 
     condition {
-      tag_state  = "TAGGED"
-      older_than = "${var.tagged_retention_days * 24}h"
+      tag_state    = "TAGGED"
+      tag_prefixes = var.pr_tag_prefixes
+      older_than   = "${var.pr_retention_days * 24}h"
     }
   }
 }
