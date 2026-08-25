@@ -56,8 +56,7 @@ resource "google_compute_instance_template" "this" {
     app-env          = var.app_env
   }
 
-  # No startup script: the image is the configuration. See
-  # docs/adr/0001-baked-images.md.
+  # No startup script: the image is the configuration.
 
   lifecycle {
     create_before_destroy = true
