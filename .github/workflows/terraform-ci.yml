@@ -346,22 +346,11 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
 
-      # An environment that has never deployed has no digest object to read.
       - name: resolve a digest to plan against
         id: digest
-        env:
-          ENVIRONMENT: ${{ matrix.environment }}
-        run: |
-          BUCKET=petclinic-capstone-tfstate
-
-          if gcloud storage cat "gs://${BUCKET}/deploy/${ENVIRONMENT}/app-image-digest" >/dev/null 2>&1; then
-            echo "digest=" >> "$GITHUB_OUTPUT"
-            echo "${ENVIRONMENT} has a recorded digest; planning against it."
-          else
-            DIGEST="$(gcloud storage cat "gs://${BUCKET}/deploy/dev/app-image-digest" | tr -d '[:space:]')"
-            echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-            echo "::notice::${ENVIRONMENT} has never deployed. Planning against dev's digest ${DIGEST} so the template renders."
-          fi
+        uses: ./.github/actions/resolve-digest
+        with:
+          environment: ${{ matrix.environment }}
 
       - name: terraform init
         working-directory: envs/${{ matrix.environment }}

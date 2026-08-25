@@ -1,0 +1,58 @@
+name: Resolve the application image digest
+description: >-
+  Works out which container digest Terraform should plan or apply against.
+  An environment that has never deployed has no pointer object, so the first
+  run would otherwise fail on a missing object rather than on anything real.
+
+inputs:
+  environment:
+    description: Environment whose recorded digest to look for.
+    required: true
+  override:
+    description: Digest supplied by hand. Wins over everything when set.
+    required: false
+    default: ""
+  bucket:
+    description: Bucket holding the deploy pointers.
+    required: false
+    default: petclinic-capstone-tfstate
+  fallback-environment:
+    description: Environment to borrow a digest from when the target has none.
+    required: false
+    default: dev
+
+outputs:
+  digest:
+    description: >-
+      Digest to pass as TF_VAR_app_image_digest. Empty means the environment has
+      its own pointer and Terraform reads it directly.
+    value: ${{ steps.resolve.outputs.digest }}
+
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      env:
+        ENVIRONMENT: ${{ inputs.environment }}
+        OVERRIDE: ${{ inputs.override }}
+        BUCKET: ${{ inputs.bucket }}
+        FALLBACK: ${{ inputs.fallback-environment }}
+      run: |
+        set -euo pipefail
+
+        if [ -n "$OVERRIDE" ]; then
+          echo "digest=${OVERRIDE}" >> "$GITHUB_OUTPUT"
+          echo "::notice::Using the digest supplied by hand: ${OVERRIDE}"
+          exit 0
+        fi
+
+        if gcloud storage cat "gs://${BUCKET}/deploy/${ENVIRONMENT}/app-image-digest" >/dev/null 2>&1; then
+          echo "digest=" >> "$GITHUB_OUTPUT"
+          echo "${ENVIRONMENT} has a recorded digest; Terraform reads it itself."
+          exit 0
+        fi
+
+        DIGEST="$(gcloud storage cat "gs://${BUCKET}/deploy/${FALLBACK}/app-image-digest" | tr -d '[:space:]')"
+        echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+        echo "::notice::${ENVIRONMENT} has never deployed. Using ${FALLBACK}'s digest ${DIGEST}."
