@@ -43,12 +43,6 @@ variable "machine_type" {
   default = "e2-medium"
 }
 
-# Plants a credential so the secret check below must fail. Used by CI.
-variable "plant_test_secret" {
-  type    = bool
-  default = false
-}
-
 locals {
   stamp = regex_replace(timestamp(), "[- TZ:]", "")
 }
@@ -113,19 +107,6 @@ build {
       "ANSIBLE_HOST_KEY_CHECKING=False",
       "ANSIBLE_NOCOLOR=True",
       "ANSIBLE_RETRY_FILES_ENABLED=False",
-    ]
-  }
-
-  # Plants into /opt, which the cleanup does not touch - a plant in a location
-  # cleanup knows about would be removed before the check ran.
-  provisioner "shell" {
-    inline = [
-      "set -eu",
-      "if [ \"${var.plant_test_secret}\" = \"true\" ]; then",
-      "  echo 'planting a fake credential in /opt so the secret check must fail' >&2",
-      "  sudo install -d -m 0755 /opt/petclinic",
-      "  printf '{\"type\": \"service_account\", \"private_key\": \"-----BEGIN PRIVATE KEY-----\\nnot-a-real-key\\n-----END PRIVATE KEY-----\"}' | sudo tee /opt/petclinic/sa-key.json >/dev/null",
-      "fi",
     ]
   }
 

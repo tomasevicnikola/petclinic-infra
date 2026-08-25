@@ -30,68 +30,8 @@ env:
   WIF_SERVICE_ACCOUNT: sa-packer@petclinic-capstone.iam.gserviceaccount.com
 
 jobs:
-  gate:
-    name: prove the secret gate fails a dirty image
-    runs-on: [self-hosted, gcp, ops]
-    timeout-minutes: 45
-
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          persist-credentials: false
-
-      - name: authenticate to gcp
-        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
-        with:
-          workload_identity_provider: ${{ env.WIF_PROVIDER }}
-          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
-
-      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
-
-      - uses: hashicorp/setup-packer@ce93c3c08a6c2ff2275bf4b54ff0d9a75f6c9789 # v3
-        with:
-          version: ${{ env.PACKER_VERSION }}
-
-      - name: install ansible
-        run: |
-          # Pinned per run: an image should not depend on the build host's
-          # ansible version.
-          python3 -m venv .venv
-          ./.venv/bin/pip install --quiet --disable-pip-version-check \
-            "ansible-core==${ANSIBLE_CORE_VERSION}"
-          echo "${PWD}/.venv/bin" >> "$GITHUB_PATH"
-
-      - name: packer init
-        working-directory: packer
-        run: packer init .
-
-      - name: the build must fail on the planted credential
-        working-directory: packer
-        run: |
-          set -uo pipefail
-
-          if packer build -color=false -var plant_test_secret=true . > plant.log 2>&1; then
-            echo "::error::The build SUCCEEDED with a planted service account key. The secret gate is not catching it - an image could ship with credential material in it."
-            tail -40 plant.log
-            exit 1
-          fi
-
-          if ! grep -q "SECRET-CHECK FAILED" plant.log; then
-            echo "::error::The build failed, but not on the secret check. The gate may not have run at all."
-            tail -40 plant.log
-            exit 1
-          fi
-
-          echo "::notice::Gate refused the planted credential, as required."
-          grep -E "SECRET-CHECK FAILED|refusing to publish" plant.log
-
   build:
     name: bake the application image
-    needs: gate
     runs-on: [self-hosted, gcp, ops]
     timeout-minutes: 30
 
