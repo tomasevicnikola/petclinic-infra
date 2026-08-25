@@ -1,10 +1,21 @@
 name: packer image
 
-# Dispatch only: the template tracks the image family, so publishing an image
-# changes what the next apply rolls out. Rebake when packer/, playbooks/image.yml
-# or the roles it runs change - a release of the application does not need one.
+# The template tracks the image family, so publishing an image changes what the
+# next apply rolls out. Rebakes happen on merge when the image's inputs change,
+# and can always be forced by hand.
 on:
   workflow_dispatch:
+
+  push:
+    branches: [main]
+    paths:
+      - 'packer/**'
+      - 'ansible/playbooks/image.yml'
+      - 'ansible/roles/common/**'
+      - 'ansible/roles/docker/**'
+      - 'ansible/roles/node_exporter/**'
+      - 'ansible/roles/app_runtime/**'
+      - '.github/workflows/packer-image.yml'
 
 permissions: {}
 
