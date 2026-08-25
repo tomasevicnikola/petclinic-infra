@@ -1,0 +1,137 @@
+---
+
+- name: Confirm the gcloud CLI the run scripts call is present
+  ansible.builtin.stat:
+    path: "{{ monitoring_stack_gcloud_bin }}"
+  register: monitoring_stack_gcloud
+
+- name: Fail if the ops VM has no gcloud CLI
+  ansible.builtin.assert:
+    that:
+      - monitoring_stack_gcloud.stat.exists
+      - monitoring_stack_gcloud.stat.executable | default(false)
+    fail_msg: >-
+      {{ monitoring_stack_gcloud_bin }} is missing. Grafana's password is read
+      through it as this instance's service account, so the stack would refuse
+      to start rather than fall back to admin/admin.
+    success_msg: "gcloud CLI present at {{ monitoring_stack_gcloud_bin }}."
+
+- name: Create the stack directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ monitoring_stack_root }}"
+    - "{{ monitoring_stack_root }}/prometheus"
+    - "{{ monitoring_stack_root }}/prometheus/rules"
+    - "{{ monitoring_stack_root }}/alertmanager"
+    - "{{ monitoring_stack_root }}/grafana/provisioning/datasources"
+    - "{{ monitoring_stack_root }}/grafana/provisioning/dashboards"
+    - "{{ monitoring_stack_root }}/grafana/dashboards"
+  become: true
+
+- name: Install the Prometheus configuration
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ monitoring_stack_root }}/prometheus/prometheus.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart the monitoring stack
+
+- name: Install the alert rules
+  ansible.builtin.template:
+    src: alert-rules.yml.j2
+    dest: "{{ monitoring_stack_root }}/prometheus/rules/petclinic.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart the monitoring stack
+
+- name: Install the Alertmanager configuration
+  ansible.builtin.template:
+    src: alertmanager.yml.j2
+    dest: "{{ monitoring_stack_root }}/alertmanager/alertmanager.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart the monitoring stack
+
+- name: Provision the Grafana datasource
+  ansible.builtin.template:
+    src: grafana-datasource.yml.j2
+    dest: "{{ monitoring_stack_root }}/grafana/provisioning/datasources/prometheus.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart the monitoring stack
+
+- name: Provision the Grafana dashboard provider
+  ansible.builtin.template:
+    src: grafana-dashboards.yml.j2
+    dest: "{{ monitoring_stack_root }}/grafana/provisioning/dashboards/petclinic.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart the monitoring stack
+
+- name: Install the dashboards
+  ansible.builtin.copy:
+    src: "dashboards/{{ item }}"
+    dest: "{{ monitoring_stack_root }}/grafana/dashboards/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ monitoring_stack_dashboards }}"
+  become: true
+  notify: Restart the monitoring stack
+
+- name: Install the compose project
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ monitoring_stack_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart the monitoring stack
+
+- name: Install the stack run script
+  ansible.builtin.template:
+    src: monitoring-up.sh.j2
+    dest: "{{ monitoring_stack_run_script }}"
+    owner: root
+    group: root
+    mode: "0755"
+    validate: bash -n %s
+  become: true
+  notify: Restart the monitoring stack
+
+- name: Install the stack unit
+  ansible.builtin.template:
+    src: monitoring-stack.service.j2
+    dest: /etc/systemd/system/{{ monitoring_stack_service_name }}.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart the monitoring stack
+
+- name: Apply any pending restarts before starting the stack
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable the monitoring stack
+  ansible.builtin.systemd_service:
+    name: "{{ monitoring_stack_service_name }}"
+    state: started
+    enabled: true
+    daemon_reload: true
+  become: true

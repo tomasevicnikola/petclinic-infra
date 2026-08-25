@@ -35,3 +35,6 @@
         gh_runner_url: "{{ gh_runner_app_url }}"
         gh_runner_dir: "{{ gh_runner_app_dir }}"
         gh_runner_token: "{{ gh_runner_app_token | default('') }}"
+
+    - role: monitoring_stack
+      tags: [monitoring_stack]

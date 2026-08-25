@@ -1,0 +1,37 @@
+# Managed by Ansible (roles/monitoring_stack). Edits here are overwritten.
+---
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+
+  group_by:
+    - alertname
+    - env
+
+  group_wait: {{ monitoring_stack_alertmanager_group_wait }}
+  group_interval: {{ monitoring_stack_alertmanager_group_interval }}
+  repeat_interval: {{ monitoring_stack_alertmanager_repeat_interval }}
+
+  routes:
+    - matchers:
+        - severity="critical"
+      receiver: default
+      repeat_interval: 1h
+
+inhibit_rules:
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal:
+      - instance
+
+receivers:
+  - name: default
+{% if monitoring_stack_alert_webhook_url %}
+    webhook_configs:
+      - url: {{ monitoring_stack_alert_webhook_url | to_json }}
+        send_resolved: true
+{% endif %}

@@ -1,0 +1,125 @@
+# Managed by Ansible (roles/monitoring_stack). Edits here are overwritten.
+# Jinja values, not inline escaping: trim_blocks folds summary into description.
+{% set INSTANCE = '{{ $labels.instance }}' %}
+{% set ENV = '{{ $labels.env }}' %}
+{% set VALUE_PCT = '{{ printf "%.0f" $value }}' %}
+---
+groups:
+  - name: petclinic-nodes
+    rules:
+      - alert: InstanceDown
+        expr: up{job=~"node.*"} == 0
+        for: {{ monitoring_stack_alert_instance_down_for }}
+        labels:
+          severity: critical
+          component: vm
+        annotations:
+          summary: >-
+            {{ INSTANCE }} has stopped exporting metrics
+          description: >-
+            The node exporter on {{ INSTANCE }}
+            ({{ ENV }}) has failed every scrape for
+            {{ monitoring_stack_alert_instance_down_for }}. The VM is still in service
+            discovery, so this is the exporter or the machine, not a scale-down.
+
+      - alert: HighCPU
+        expr: >-
+          100 - (avg by (instance, env, job) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+          > {{ monitoring_stack_alert_cpu_percent }}
+        for: {{ monitoring_stack_alert_cpu_for }}
+        labels:
+          severity: warning
+          component: vm
+        annotations:
+          summary: >-
+            {{ INSTANCE }} is at
+            {{ VALUE_PCT }}% CPU
+          description: >-
+            CPU on {{ INSTANCE }}
+            ({{ ENV }}) has been above
+            {{ monitoring_stack_alert_cpu_percent }}% for {{ monitoring_stack_alert_cpu_for }}.
+            The autoscaler adds instances at 60% average across the group, so a
+            single VM this high usually means one instance is doing work the
+            others are not.
+
+      - alert: HighMemory
+        expr: >-
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+          > {{ monitoring_stack_alert_memory_percent }}
+        for: {{ monitoring_stack_alert_memory_for }}
+        labels:
+          severity: warning
+          component: vm
+        annotations:
+          summary: >-
+            {{ INSTANCE }} is at
+            {{ VALUE_PCT }}% memory
+          description: >-
+            Memory in use on {{ INSTANCE }}
+            ({{ ENV }}) has been above
+            {{ monitoring_stack_alert_memory_percent }}% for
+            {{ monitoring_stack_alert_memory_for }}, measured as unavailable rather
+            than not-free, so page cache is not counted against it.
+
+  - name: petclinic-app
+    rules:
+      - alert: AppHealthDown
+        expr: up{job="petclinic-app"} == 0
+        for: {{ monitoring_stack_alert_app_down_for }}
+        labels:
+          severity: critical
+          component: app
+        annotations:
+          summary: >-
+            PetClinic is not answering on {{ INSTANCE }}
+          description: >-
+            The actuator on {{ INSTANCE }}
+            ({{ ENV }}) has failed every scrape for
+            {{ monitoring_stack_alert_app_down_for }}. The VM is still in service
+            discovery, so the machine is up and the application is not. If
+            autohealing is on and the instance is genuinely unhealthy, expect
+            this to resolve on its own once the group replaces it. External
+            availability is watched by the Cloud Monitoring uptime check, not
+            from here.
+
+      - alert: HighJvmHeap
+        expr: >-
+          sum by (instance, env) (jvm_memory_used_bytes{area="heap"})
+          / sum by (instance, env) (jvm_memory_max_bytes{area="heap"}) * 100
+          > {{ monitoring_stack_alert_heap_percent }}
+        for: {{ monitoring_stack_alert_heap_for }}
+        labels:
+          severity: warning
+          component: app
+        annotations:
+          summary: >-
+            JVM heap on {{ INSTANCE }} is at
+            {{ VALUE_PCT }}% of max
+          description: >-
+            The JVM on {{ INSTANCE }}
+            ({{ ENV }}) has held more than
+            {{ monitoring_stack_alert_heap_percent }}% of its maximum heap for
+            {{ monitoring_stack_alert_heap_for }}. Sustained, this is the shape of a
+            leak or an undersized heap; a full GC that frees it is the shape of
+            a busy service.
+
+  - name: petclinic-monitoring
+    rules:
+      - alert: MonitoringDown
+        expr: up{job="monitoring"} == 0
+        for: {{ monitoring_stack_alert_monitoring_down_for }}
+        labels:
+          severity: critical
+          component: monitoring
+        annotations:
+          summary: >-
+            The monitoring stack cannot see {{ INSTANCE }}
+          description: >-
+            Prometheus has failed to scrape {{ INSTANCE }} for
+            {{ monitoring_stack_alert_monitoring_down_for }}. This is the
+            monitoring stack reporting on itself, so treat every other alert as
+            unreliable until it clears: a Prometheus that cannot scrape its own
+            containers may not be evaluating the rest of the rules either. Check
+            `systemctl status petclinic-monitoring` and
+            `docker compose --project-name petclinic-monitoring ps` on the ops
+            VM.

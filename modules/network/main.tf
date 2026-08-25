@@ -156,7 +156,7 @@ resource "google_compute_firewall" "ops_to_app" {
   project     = var.project_id
   name        = "${var.network_name}-allow-ops-to-app"
   network     = google_compute_network.this.id
-  description = "Post-deploy verification from the ops VM against each instance's application port."
+  description = "Ops VM to the application port: post-deploy verification, and the Prometheus scrape of /actuator/prometheus."
 
   direction   = "INGRESS"
   priority    = 1000

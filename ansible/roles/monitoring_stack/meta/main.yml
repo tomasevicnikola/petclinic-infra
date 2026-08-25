@@ -1,0 +1,16 @@
+---
+galaxy_info:
+  role_name: monitoring_stack
+  author: tomasevicnikola
+  description: >-
+    Prometheus, Grafana and Alertmanager as a pinned Docker Compose project on
+    the ops VM. Loopback only; reached over the IAP tunnel.
+  company: petclinic capstone
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+
+dependencies: []

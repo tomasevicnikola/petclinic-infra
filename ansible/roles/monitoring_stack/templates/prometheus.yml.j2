@@ -1,0 +1,93 @@
+# Managed by Ansible (roles/monitoring_stack). Edits here are overwritten.
+---
+global:
+  scrape_interval: {{ monitoring_stack_scrape_interval }}
+  scrape_timeout: {{ monitoring_stack_scrape_timeout }}
+  evaluation_interval: {{ monitoring_stack_evaluation_interval }}
+
+  external_labels:
+    monitor: petclinic
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  - job_name: node
+    scheme: http
+
+    gce_sd_configs:
+{% for zone in monitoring_stack_gce_zones %}
+      - project: {{ monitoring_stack_project }}
+        zone: {{ zone }}
+        port: {{ monitoring_stack_node_exporter_port }}
+        filter: '(status = "RUNNING") (tags.items:{{ monitoring_stack_app_tag }})'
+{% endfor %}
+
+    relabel_configs:
+      - source_labels: [__meta_gce_tags]
+        regex: '.*,{{ monitoring_stack_app_tag }},.*'
+        action: keep
+
+      - source_labels: [__meta_gce_instance_name]
+        target_label: instance
+
+      - source_labels: [__meta_gce_zone]
+        regex: '.*/([^/]+)'
+        target_label: zone
+        replacement: '$1'
+
+      - source_labels: [__meta_gce_metadata_app_env]
+        target_label: env
+
+  - job_name: petclinic-app
+    scheme: http
+    metrics_path: {{ monitoring_stack_actuator_path }}
+
+    gce_sd_configs:
+{% for zone in monitoring_stack_gce_zones %}
+      - project: {{ monitoring_stack_project }}
+        zone: {{ zone }}
+        port: {{ monitoring_stack_app_port }}
+        filter: '(status = "RUNNING") (tags.items:{{ monitoring_stack_app_tag }})'
+{% endfor %}
+
+    relabel_configs:
+      - source_labels: [__meta_gce_tags]
+        regex: '.*,{{ monitoring_stack_app_tag }},.*'
+        action: keep
+
+      - source_labels: [__meta_gce_instance_name]
+        target_label: instance
+
+      - source_labels: [__meta_gce_zone]
+        regex: '.*/([^/]+)'
+        target_label: zone
+        replacement: '$1'
+
+      - source_labels: [__meta_gce_metadata_app_env]
+        target_label: env
+
+  - job_name: node-ops
+    static_configs:
+      - targets:
+          - "{{ ansible_facts['default_ipv4']['address'] }}:{{ monitoring_stack_node_exporter_port }}"
+        labels:
+          instance: "{{ inventory_hostname }}"
+          env: "{{ monitoring_stack_env }}"
+          role: ops
+
+  - job_name: monitoring
+    static_configs:
+      - targets:
+          - prometheus:9090
+          - alertmanager:9093
+          - grafana:3000
+        labels:
+          env: "{{ monitoring_stack_env }}"
+          role: ops

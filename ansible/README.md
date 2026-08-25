@@ -1,8 +1,9 @@
 # ansible
 
 Configures every VM in the project: base packages, Docker, node exporter, the
-application runner, and the self-hosted GitHub runner on the ops VM. Terraform
-builds the machines; nothing here creates infrastructure.
+application runner, the self-hosted GitHub runner on the ops VM, and the
+monitoring stack that watches all of it. Terraform builds the machines; nothing
+here creates infrastructure.
 
 ## When each role runs
 
@@ -15,6 +16,7 @@ Two phases. Which one a role belongs to is the thing to know before editing it.
 | `node_exporter` | ● | ● | Binds to the instance IP, resolved per boot |
 | `app_runtime` | ● | | Installs the boot-time runner; never runs the app |
 | `gh_runner` | | ● | Self-hosted runner registration |
+| `monitoring_stack` | | ● | Prometheus, Grafana, Alertmanager |
 
 **Bake** — `playbooks/image.yml`, run by Packer against a throwaway builder VM
 whose disk becomes the `petclinic-app` image. Every application instance boots
@@ -139,6 +141,13 @@ via `docker inspect`.
 **The runner registration token is never stored.** Single-use, expires in about
 an hour, passed per run; `docs/RUNNER.md` has the command.
 
+**Grafana's password is never on disk.** `monitoring_stack` reads it from Secret
+Manager at container start and hands it to Compose in the environment.
+
+**Nothing in this tree writes a credential to disk.** Every Google API call uses
+the instance's own identity from the metadata server — no service account key,
+no token file.
+
 ## Roles
 
 | Role | What it does |
@@ -148,11 +157,13 @@ an hour, passed per run; `docs/RUNNER.md` has the command.
 | `node_exporter` | pinned release, checksum verified, dedicated nologin user, hardened unit bound to the internal IP |
 | `gh_runner` | ops only; replaces the manual install and adopts one that already exists |
 | `app_runtime` | the boot-time runner: a systemd unit that reads the image digest from instance metadata, fetches the database credentials and starts the container |
+| `monitoring_stack` | ops only; Prometheus, Grafana and Alertmanager as a digest-pinned compose project bound to loopback |
 
-Everything downloaded is checksum-verified, and the Docker apt key is checked
-twice — the sha256 of the file, and the OpenPGP fingerprint of the key inside
-it. Only `ansible.builtin` modules are used, which is what lets the CI lint job
-run `--offline` with no collections installed.
+Everything downloaded is checksum-verified, the Docker apt key is checked twice
+— the sha256 of the file, and the OpenPGP fingerprint of the key inside it — and
+every container image is pinned by digest as well as tag. Only `ansible.builtin`
+modules are used, which is what lets the CI lint job run `--offline` with no
+collections installed.
 
 ### The runner is not in the docker group
 

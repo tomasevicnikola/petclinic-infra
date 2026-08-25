@@ -1,0 +1,63 @@
+---
+monitoring_stack_env: "{{ lookup('env', 'ANSIBLE_ENV') | default('dev', true) }}"
+
+monitoring_stack_project: petclinic-capstone
+monitoring_stack_region: europe-west3
+
+monitoring_stack_prometheus_image: prom/prometheus:v3.14.0
+monitoring_stack_prometheus_digest: "sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0"
+
+monitoring_stack_grafana_image: grafana/grafana:13.2.0
+monitoring_stack_grafana_digest: "sha256:3fd54ae1214669f8355f065ec9f6445d5279a3d77095ab048ca045685272429b"
+
+monitoring_stack_alertmanager_image: prom/alertmanager:v0.34.0
+monitoring_stack_alertmanager_digest: "sha256:690c7b525f4367aa91f73e2f91c632206d32e97c6384bdbf2fb7a861b420340d"
+
+monitoring_stack_root: /opt/petclinic-monitoring
+monitoring_stack_compose_project: petclinic-monitoring
+monitoring_stack_service_name: petclinic-monitoring
+
+# Loopback only; reached over the IAP SSH tunnel.
+monitoring_stack_bind_address: 127.0.0.1
+monitoring_stack_prometheus_port: 9090
+monitoring_stack_grafana_port: 3000
+monitoring_stack_alertmanager_port: 9093
+
+monitoring_stack_scrape_interval: 30s
+monitoring_stack_scrape_timeout: 10s
+monitoring_stack_evaluation_interval: 30s
+monitoring_stack_retention_time: 90d
+monitoring_stack_retention_size: 10GB
+
+monitoring_stack_gce_zones:
+  - europe-west3-a
+  - europe-west3-b
+  - europe-west3-c
+
+monitoring_stack_app_tag: app
+monitoring_stack_app_port: 8080
+monitoring_stack_actuator_path: /actuator/prometheus
+monitoring_stack_node_exporter_port: 9100
+
+monitoring_stack_alert_cpu_percent: 80
+monitoring_stack_alert_cpu_for: 5m
+monitoring_stack_alert_memory_percent: 85
+monitoring_stack_alert_memory_for: 5m
+monitoring_stack_alert_heap_percent: 90
+monitoring_stack_alert_heap_for: 5m
+monitoring_stack_alert_instance_down_for: 2m
+monitoring_stack_alert_app_down_for: 2m
+# Longer, so a config restart does not alert.
+monitoring_stack_alert_monitoring_down_for: 5m
+
+monitoring_stack_alertmanager_group_wait: 30s
+monitoring_stack_alertmanager_group_interval: 5m
+monitoring_stack_alertmanager_repeat_interval: 4h
+
+# Empty: visible in Prometheus and Alertmanager, delivered nowhere.
+monitoring_stack_alert_webhook_url: ""
+
+monitoring_stack_grafana_secret: "{{ monitoring_stack_env }}-grafana-admin-password"
+monitoring_stack_grafana_datasource_uid: prometheus
+
+monitoring_stack_gcloud_bin: /snap/bin/gcloud
