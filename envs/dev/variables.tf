@@ -36,6 +36,12 @@ variable "create_ops_vm" {
   type        = bool
 }
 
+variable "ops_machine_type" {
+  description = "Machine type of the ops VM."
+  type        = string
+  default     = "e2-medium"
+}
+
 variable "create_artifact_registry" {
   description = "Whether this environment creates the shared image repository."
   type        = bool
@@ -108,6 +114,30 @@ variable "vault_password_version" {
   description = "Bump to rotate the Ansible Vault password."
   type        = number
   default     = 1
+}
+
+variable "grafana_password_version" {
+  description = "Bump to rotate the Grafana admin password."
+  type        = number
+  default     = 1
+}
+
+variable "create_cloud_monitoring" {
+  description = "Whether to create the Cloud Monitoring dashboard and alert policies."
+  type        = bool
+  default     = true
+}
+
+variable "cloud_monitoring_cpu_threshold" {
+  description = "CPU fraction that opens the Cloud Monitoring CPU alert."
+  type        = number
+  default     = 0.8
+}
+
+variable "cloud_monitoring_notification_email" {
+  description = "Address Cloud Monitoring alerts are emailed to. Supplied as TF_VAR_cloud_monitoring_notification_email."
+  type        = string
+  default     = null
 }
 
 variable "lb_allowed_members" {

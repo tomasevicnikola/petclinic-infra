@@ -14,9 +14,9 @@ variable "instance_name" {
 }
 
 variable "machine_type" {
-  description = "Machine type. e2-small holds a runner plus a small compose stack; raise it when the monitoring stack lands."
+  description = "Machine type. Sized for two runners and the monitoring stack running at the same time."
   type        = string
-  default     = "e2-small"
+  default     = "e2-medium"
 }
 
 variable "boot_image" {

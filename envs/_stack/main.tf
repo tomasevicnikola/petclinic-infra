@@ -40,6 +40,7 @@ module "ops_vm" {
   instance_name         = "${local.name_prefix}-ops"
   subnet_id             = module.network.subnet_id
   service_account_email = local.ops_vm_service_account
+  machine_type          = var.ops_machine_type
 
   network_tags = [module.network.tags.ssh_iap, module.network.tags.ops]
 }
@@ -127,6 +128,9 @@ module "secrets" {
 
   iap_oauth_client_secret         = var.iap_oauth_client_secret
   iap_oauth_client_secret_version = var.iap_oauth_client_secret_version
+
+  grafana_password_version = var.grafana_password_version
+  create_grafana_secret    = var.create_ops_vm
 }
 
 module "artifact_registry" {
@@ -144,4 +148,19 @@ module "artifact_registry" {
   untagged_retention_days = var.registry_untagged_retention_days
   tagged_retention_days   = var.registry_tagged_retention_days
   cleanup_dry_run         = var.registry_cleanup_dry_run
+}
+
+module "cloud_monitoring" {
+  source = "../../modules/cloud-monitoring"
+  count  = var.create_cloud_monitoring ? 1 : 0
+
+  project_id  = var.project_id
+  environment = var.environment
+  name_prefix = local.name_prefix
+
+  db_instance_name = module.cloudsql.instance_name
+  lb_host          = module.load_balancer.host
+
+  cpu_threshold      = var.cloud_monitoring_cpu_threshold
+  notification_email = var.cloud_monitoring_notification_email
 }

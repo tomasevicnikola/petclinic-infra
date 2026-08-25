@@ -55,6 +55,12 @@ variable "create_ops_vm" {
   default     = true
 }
 
+variable "ops_machine_type" {
+  description = "Machine type of the ops VM. Holds two runners plus the monitoring stack, so it is sized for both running at once."
+  type        = string
+  default     = "e2-medium"
+}
+
 variable "create_artifact_registry" {
   description = "Whether this environment creates the shared image repository."
   type        = bool
@@ -206,6 +212,30 @@ variable "vault_password_version" {
   description = "Bump to rotate the Ansible Vault password."
   type        = number
   default     = 1
+}
+
+variable "grafana_password_version" {
+  description = "Bump to rotate the Grafana admin password."
+  type        = number
+  default     = 1
+}
+
+variable "create_cloud_monitoring" {
+  description = "Whether to create the Cloud Monitoring dashboard and alert policies for this environment."
+  type        = bool
+  default     = true
+}
+
+variable "cloud_monitoring_cpu_threshold" {
+  description = "CPU fraction that opens the Cloud Monitoring CPU alert. Kept equal to the Prometheus HighCPU threshold."
+  type        = number
+  default     = 0.8
+}
+
+variable "cloud_monitoring_notification_email" {
+  description = "Address Cloud Monitoring alerts are emailed to. Null creates no channel; incidents stay in the console. Supplied as TF_VAR_cloud_monitoring_notification_email, never committed."
+  type        = string
+  default     = null
 }
 
 variable "registry_repository_id" {
