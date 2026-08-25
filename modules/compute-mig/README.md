@@ -22,4 +22,5 @@ Two health checks: `this` is the load balancer's (3 × 10s), `autohealing` is th
 group's (5 × 30s, 240s initial delay). Separate because taking an instance out
 of the pool is cheaper than destroying it. Autohealing is on.
 
-See [ADR 0001](../../docs/adr/0001-baked-images.md).
+The image itself is built by `packer/` and `ansible/playbooks/image.yml`; this
+module only boots it.
