@@ -8,6 +8,11 @@ output "url" {
   value       = "https://${local.host}"
 }
 
+output "host" {
+  description = "Hostname the load balancer answers on and the certificate is issued for: the sslip.io name while there is no domain, otherwise the domain."
+  value       = local.host
+}
+
 output "sslip_host" {
   description = "sslip.io name that resolves to the load balancer IP, useful while there is no real domain."
   value       = local.sslip_host

@@ -5,6 +5,7 @@ psa_cidr    = "10.20.0.0/16"
 
 create_ops_vm            = true
 create_artifact_registry = true
+ops_machine_type         = "e2-medium"
 
 db_tier                           = "db-g1-small"
 db_availability_type              = "ZONAL"

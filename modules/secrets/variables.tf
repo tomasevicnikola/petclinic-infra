@@ -66,3 +66,20 @@ variable "iap_oauth_client_secret_version" {
     error_message = "iap_oauth_client_secret_version must be at least 1."
   }
 }
+
+variable "grafana_password_version" {
+  description = "Bump to rotate the Grafana admin password. Grafana reads it at container start, so the stack has to be restarted afterwards for the new one to take effect."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.grafana_password_version >= 1
+    error_message = "grafana_password_version must be at least 1."
+  }
+}
+
+variable "create_grafana_secret" {
+  description = "Whether this environment needs a Grafana admin password. True only where the ops VM, and therefore the monitoring stack, exists."
+  type        = bool
+  default     = true
+}

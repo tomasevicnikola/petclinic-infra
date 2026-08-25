@@ -375,6 +375,7 @@ jobs:
         env:
           TF_VAR_lb_allowed_members: ${{ vars.LB_ALLOWED_MEMBERS }}
           TF_VAR_iap_oauth_client_secret: ${{ secrets.IAP_OAUTH_CLIENT_SECRET }}
+          TF_VAR_cloud_monitoring_notification_email: ${{ vars.CLOUD_MONITORING_EMAIL }}
           TF_VAR_app_image_digest: ${{ steps.digest.outputs.digest }}
         run: |
           set +e

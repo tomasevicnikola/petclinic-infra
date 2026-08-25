@@ -16,6 +16,7 @@ terraform {
 locals {
   vault_secret_id            = "${var.env_prefix}-ansible-vault-password"
   iap_oauth_client_secret_id = "${var.env_prefix}-iap-oauth-client-secret"
+  grafana_admin_secret_id    = "${var.env_prefix}-grafana-admin-password"
 }
 
 ephemeral "random_password" "ansible_vault" {
@@ -91,4 +92,74 @@ resource "google_secret_manager_secret_version" "iap_oauth_client" {
   lifecycle {
     create_before_destroy = true
   }
+}
+
+ephemeral "random_password" "grafana_admin" {
+  length           = 32
+  special          = true
+  override_special = "-_.~"
+  min_upper        = 2
+  min_lower        = 2
+  min_numeric      = 2
+  min_special      = 2
+}
+
+resource "google_secret_manager_secret" "grafana_admin" {
+  # Only where the ops VM, and therefore the monitoring stack, exists.
+  count = var.create_grafana_secret ? 1 : 0
+
+  project             = var.project_id
+  secret_id           = local.grafana_admin_secret_id
+  deletion_protection = false
+
+  labels = {
+    component = "monitoring"
+  }
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
+resource "google_secret_manager_secret_version" "grafana_admin" {
+  count = var.create_grafana_secret ? 1 : 0
+
+  secret                 = google_secret_manager_secret.grafana_admin[0].id
+  secret_data_wo         = ephemeral.random_password.grafana_admin.result
+  secret_data_wo_version = var.grafana_password_version
+  deletion_policy        = "DISABLE"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "grafana_admin_accessor" {
+  count = var.create_grafana_secret ? 1 : 0
+
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.grafana_admin[0].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${var.ops_service_account_email}"
+}
+
+# Without these, grafana_admin -> grafana_admin[0] reads as a new resource and
+# Terraform destroys the live secret.
+moved {
+  from = google_secret_manager_secret.grafana_admin
+  to   = google_secret_manager_secret.grafana_admin[0]
+}
+
+moved {
+  from = google_secret_manager_secret_version.grafana_admin
+  to   = google_secret_manager_secret_version.grafana_admin[0]
+}
+
+moved {
+  from = google_secret_manager_secret_iam_member.grafana_admin_accessor
+  to   = google_secret_manager_secret_iam_member.grafana_admin_accessor[0]
 }

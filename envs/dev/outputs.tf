@@ -78,6 +78,11 @@ output "ansible_vault_secret_id" {
   value       = module.stack.ansible_vault_secret_id
 }
 
+output "grafana_admin_secret_id" {
+  description = "Secret holding Grafana's admin password. Null where no ops VM, and therefore no monitoring stack, exists."
+  value       = module.stack.grafana_admin_secret_id
+}
+
 output "app_instance_group" {
   description = "Managed instance group self link."
   value       = module.stack.app_instance_group
@@ -128,3 +133,12 @@ output "registry_repository_id" {
   value       = module.stack.registry_repository_id
 }
 
+output "cloud_monitoring_dashboard_id" {
+  description = "Cloud Monitoring dashboard for this environment."
+  value       = module.stack.cloud_monitoring_dashboard_id
+}
+
+output "cloud_monitoring_alert_policies" {
+  description = "Alert policies created in Cloud Monitoring."
+  value       = module.stack.cloud_monitoring_alert_policies
+}

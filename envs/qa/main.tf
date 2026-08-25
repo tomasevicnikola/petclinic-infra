@@ -11,6 +11,7 @@ module "stack" {
 
   create_ops_vm            = var.create_ops_vm
   create_artifact_registry = var.create_artifact_registry
+  ops_machine_type         = var.ops_machine_type
 
   db_tier                           = var.db_tier
   db_availability_type              = var.db_availability_type
@@ -28,8 +29,14 @@ module "stack" {
   vault_deletion_protection = var.vault_deletion_protection
   vault_password_version    = var.vault_password_version
 
+  grafana_password_version = var.grafana_password_version
+
   lb_allowed_members              = var.lb_allowed_members
   lb_domain                       = var.lb_domain
   iap_oauth_client_secret         = var.iap_oauth_client_secret
   iap_oauth_client_secret_version = var.iap_oauth_client_secret_version
+
+  create_cloud_monitoring             = var.create_cloud_monitoring
+  cloud_monitoring_cpu_threshold      = var.cloud_monitoring_cpu_threshold
+  cloud_monitoring_notification_email = var.cloud_monitoring_notification_email
 }

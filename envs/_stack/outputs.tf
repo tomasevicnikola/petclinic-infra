@@ -78,6 +78,11 @@ output "ansible_vault_secret_id" {
   value       = module.secrets.ansible_vault_secret_id
 }
 
+output "grafana_admin_secret_id" {
+  description = "Secret holding Grafana's admin password. Null where no ops VM, and therefore no monitoring stack, exists."
+  value       = module.secrets.grafana_admin_secret_id
+}
+
 output "app_instance_group" {
   description = "Managed instance group self link."
   value       = module.compute_mig.instance_group
@@ -126,4 +131,14 @@ output "registry_host" {
 output "registry_repository_id" {
   description = "Docker repository name. Null where the environment does not create the repository."
   value       = one(module.artifact_registry[*].repository_id)
+}
+
+output "cloud_monitoring_dashboard_id" {
+  description = "Cloud Monitoring dashboard for this environment. Null where it is not created."
+  value       = one(module.cloud_monitoring[*].dashboard_id)
+}
+
+output "cloud_monitoring_alert_policies" {
+  description = "Alert policies created in Cloud Monitoring. Null where they are not created."
+  value       = one(module.cloud_monitoring[*].alert_policy_names)
 }
