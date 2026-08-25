@@ -60,11 +60,15 @@ no Ansible run is involved.
 ## prod
 
 `envs/prod` is planned and reviewed on every pull request that touches shared
-code, and has never been applied. Two things block it:
+code, and has never been applied. Three things block it:
 
-- the `prod` GitHub Environment requires a reviewer and only allows `main`
-- `terraform-apply.yml` and `terraform-destroy.yml` both fail unless the
+- the `prod` GitHub Environment, in both repositories, requires a reviewer and
+  only allows `main`. `dev` and `qa` require neither
+- `terraform-apply.yml` and `terraform-destroy.yml` fail unless the
   `ALLOW_PROD_APPLY` repository variable is exactly `true`
+- `deploy.yml` in the application repository fails unless `ALLOW_PROD_DEPLOY`
+  is exactly `true` — its own variable, since repository variables do not cross
+  repositories
 
 Applying it would cost roughly €390 a month, dominated by the REGIONAL database.
 

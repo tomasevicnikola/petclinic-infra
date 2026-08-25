@@ -146,7 +146,7 @@ module "artifact_registry" {
 
   keep_recent_count       = var.registry_keep_recent_count
   untagged_retention_days = var.registry_untagged_retention_days
-  tagged_retention_days   = var.registry_tagged_retention_days
+  pr_retention_days       = var.registry_pr_retention_days
   cleanup_dry_run         = var.registry_cleanup_dry_run
 }
 

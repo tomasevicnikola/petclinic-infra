@@ -262,8 +262,8 @@ variable "registry_untagged_retention_days" {
   default     = 7
 }
 
-variable "registry_tagged_retention_days" {
-  description = "How long a tagged image lives once outside keep_recent_count."
+variable "registry_pr_retention_days" {
+  description = "How long a pull-request image lives. Release tags are never deleted by age."
   type        = number
-  default     = 30
+  default     = 14
 }

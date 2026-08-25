@@ -15,8 +15,13 @@ else. It is its first binding — bootstrap left it with no roles until there wa
 a resource to scope one to. `sa-app-vm` still reads project-wide from
 bootstrap; narrowing that to this repository is a follow-up, not this change.
 
-Three cleanup rules. `keep-recent-versions` protects the newest
-`keep_recent_count` versions at any age, `delete-untagged` and
-`delete-old-tagged` clear the rest. KEEP wins over DELETE, so the keep rule is
-a floor under the other two. It is not tag-aware, so untagged versions take
-slots and rollback depth is at most `keep_recent_count`.
+Three cleanup rules. KEEP wins over DELETE.
+
+| Rule | Covers |
+| --- | --- |
+| `keep-recent-versions` | newest `keep_recent_count`, any age |
+| `delete-untagged` | untagged older than `untagged_retention_days` |
+| `delete-pr-builds` | tags starting `sha-`, older than `pr_retention_days` |
+
+Release tags match no delete rule and are never removed by age — instances pull
+by digest, so a deleted release would break the next instance replacement.
