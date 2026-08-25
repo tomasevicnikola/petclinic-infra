@@ -13,5 +13,9 @@ Google's health checkers, and the node exporter port only to VMs tagged `ops`.
 NAT carries egress out; nothing comes back in through it.
 
 Port 8080 on `app` instances is open to Google's health check ranges and to the
-`ops` tag. The second is what lets the deploy pipeline verify each instance
-directly after a release.
+`ops` tag. The second carries both the deploy pipeline's post-release
+verification and the Prometheus scrape of `/actuator/prometheus`, so monitoring
+needed no new rule.
+
+Nothing opens a port to the IAP range except 22. Grafana and Prometheus are
+reached by forwarding over the existing SSH tunnel.

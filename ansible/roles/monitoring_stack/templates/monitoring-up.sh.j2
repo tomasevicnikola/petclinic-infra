@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Managed by Ansible (roles/monitoring_stack). Edits here are overwritten.
+set -euo pipefail
+
+readonly COMPOSE_FILE={{ monitoring_stack_compose_file | quote }}
+readonly GCLOUD={{ monitoring_stack_gcloud_bin | quote }}
+readonly PROJECT={{ monitoring_stack_project | quote }}
+readonly SECRET={{ monitoring_stack_grafana_secret | quote }}
+
+log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" >&2; }
+
+if [ ! -x "${GCLOUD}" ]; then
+  log "FATAL ${GCLOUD} not found - the Google Cloud CLI snap is missing"
+  exit 1
+fi
+
+password=""
+for attempt in $(seq 1 5); do
+  if password="$("${GCLOUD}" secrets versions access latest \
+                   --secret="${SECRET}" --project="${PROJECT}" 2>/dev/null)"; then
+    break
+  fi
+  if [ "${attempt}" -eq 5 ]; then
+    log "FATAL could not read ${SECRET} after 5 attempts."
+    log "      Check that sa-ops-vm still holds secretAccessor on it; the"
+    log "      binding is per-secret and lives in modules/secrets."
+    exit 1
+  fi
+  sleep 3
+done
+
+if [ -z "${password}" ]; then
+  log "FATAL ${SECRET} is empty. Refusing to start: Grafana would fall back to"
+  log "      its built-in admin/admin."
+  exit 1
+fi
+
+export GF_SECURITY_ADMIN_PASSWORD="${password}"
+unset password
+
+log "starting the monitoring stack from ${COMPOSE_FILE}"
+exec docker compose --file "${COMPOSE_FILE}" up --detach --remove-orphans --wait

@@ -1,0 +1,15 @@
+# Managed by Ansible (roles/monitoring_stack). Edits here are overwritten.
+---
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: {{ monitoring_stack_grafana_datasource_uid }}
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: {{ monitoring_stack_scrape_interval }}
+      httpMethod: POST

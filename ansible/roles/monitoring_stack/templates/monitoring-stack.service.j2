@@ -1,0 +1,22 @@
+[Unit]
+# Managed by Ansible (roles/monitoring_stack). Edits here are overwritten.
+Description=PetClinic monitoring stack (Prometheus, Grafana, Alertmanager)
+Documentation=https://github.com/tomasevicnikola/petclinic-infra
+Requires=docker.service
+After=docker.service network-online.target snapd.seeded.service
+Wants=network-online.target snapd.seeded.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+ExecStart={{ monitoring_stack_run_script }}
+
+# No --file: compose interpolates it even for `down`, and ExecStop has no
+# GF_SECURITY_ADMIN_PASSWORD, so --file makes every stop fail silently.
+ExecStop=/usr/bin/docker compose --project-name {{ monitoring_stack_compose_project }} down
+
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
