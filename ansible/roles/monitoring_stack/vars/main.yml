@@ -5,6 +5,7 @@ monitoring_stack_grafana_ref: "{{ monitoring_stack_grafana_image }}@{{ monitorin
 monitoring_stack_compose_file: "{{ monitoring_stack_root }}/docker-compose.yml"
 monitoring_stack_run_script: /usr/local/bin/petclinic-monitoring-up.sh
 
+# Only the rollout dashboard is provisioned. node-overview.json and jvm-app.json
+# stay in files/dashboards/; list one here to provision it.
 monitoring_stack_dashboards:
-  - node-overview.json
-  - jvm-app.json
+  - rollout.json

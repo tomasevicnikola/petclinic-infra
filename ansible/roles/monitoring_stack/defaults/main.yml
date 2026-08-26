@@ -19,7 +19,10 @@ monitoring_stack_bind_address: 127.0.0.1
 monitoring_stack_prometheus_port: 9090
 monitoring_stack_grafana_port: 3000
 
-monitoring_stack_scrape_interval: 30s
+# 15s, not 30s: a rolling deploy takes about eight minutes, and 30s resolution
+# renders that as sixteen points. Must stay >= scrape_timeout, which the
+# unreachable qa targets consume in full on every scrape.
+monitoring_stack_scrape_interval: 15s
 monitoring_stack_scrape_timeout: 10s
 monitoring_stack_retention_time: 90d
 monitoring_stack_retention_size: 10GB
