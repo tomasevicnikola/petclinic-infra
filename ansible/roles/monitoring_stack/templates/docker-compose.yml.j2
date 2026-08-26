@@ -50,6 +50,9 @@ services:
 
       GF_SERVER_ROOT_URL: http://localhost:{{ monitoring_stack_grafana_port }}/
 
+      # Land on the rollout dashboard rather than an empty home page.
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/rollout.json
+
     volumes:
       - grafana-data:/var/lib/grafana
       - {{ monitoring_stack_root }}/grafana/provisioning:/etc/grafana/provisioning:ro
