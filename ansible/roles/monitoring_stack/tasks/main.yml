@@ -26,8 +26,6 @@
   loop:
     - "{{ monitoring_stack_root }}"
     - "{{ monitoring_stack_root }}/prometheus"
-    - "{{ monitoring_stack_root }}/prometheus/rules"
-    - "{{ monitoring_stack_root }}/alertmanager"
     - "{{ monitoring_stack_root }}/grafana/provisioning/datasources"
     - "{{ monitoring_stack_root }}/grafana/provisioning/dashboards"
     - "{{ monitoring_stack_root }}/grafana/dashboards"
@@ -37,26 +35,6 @@
   ansible.builtin.template:
     src: prometheus.yml.j2
     dest: "{{ monitoring_stack_root }}/prometheus/prometheus.yml"
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-  notify: Restart the monitoring stack
-
-- name: Install the alert rules
-  ansible.builtin.template:
-    src: alert-rules.yml.j2
-    dest: "{{ monitoring_stack_root }}/prometheus/rules/petclinic.yml"
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-  notify: Restart the monitoring stack
-
-- name: Install the Alertmanager configuration
-  ansible.builtin.template:
-    src: alertmanager.yml.j2
-    dest: "{{ monitoring_stack_root }}/alertmanager/alertmanager.yml"
     owner: root
     group: root
     mode: "0644"

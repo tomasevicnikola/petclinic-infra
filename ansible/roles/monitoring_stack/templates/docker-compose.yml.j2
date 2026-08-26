@@ -18,7 +18,6 @@ services:
 
     volumes:
       - {{ monitoring_stack_root }}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - {{ monitoring_stack_root }}/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
 
     ports:
@@ -64,29 +63,6 @@ services:
     cap_drop:
       - ALL
 
-  alertmanager:
-    image: {{ monitoring_stack_alertmanager_ref }}
-    container_name: petclinic-alertmanager
-    restart: unless-stopped
-
-    command:
-      - --config.file=/etc/alertmanager/alertmanager.yml
-      - --storage.path=/alertmanager
-
-    volumes:
-      - {{ monitoring_stack_root }}/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-      - alertmanager-data:/alertmanager
-
-    ports:
-      - "{{ monitoring_stack_bind_address }}:{{ monitoring_stack_alertmanager_port }}:9093"
-
-
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-
 volumes:
   prometheus-data:
   grafana-data:
-  alertmanager-data:

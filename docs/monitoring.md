@@ -2,9 +2,8 @@
 
 ## What runs
 
-Prometheus, Grafana and Alertmanager as one Docker Compose project on the **dev**
-ops VM, installed by `ansible/roles/monitoring_stack`. Images pinned by tag and
-digest.
+Prometheus and Grafana as one Docker Compose project on the **dev** ops VM,
+installed by `ansible/roles/monitoring_stack`. Images pinned by tag and digest.
 
 One stack serves every environment: app VMs are found by GCE service discovery
 and carry an `env` label from their `app-env` instance metadata, so a new
@@ -31,16 +30,9 @@ Two, provisioned from JSON committed in the role. Each has an `env` selector.
 
 ## Alerts
 
-Six Prometheus rules — `InstanceDown`, `HighCPU`, `HighMemory`, `AppHealthDown`,
-`HighJvmHeap`, `MonitoringDown` — read in Alertmanager, which groups, inhibits
-and silences them.
-
-`AppHealthDown` watches the actuator scrape on each instance. Reachability from
-outside is the uptime check's job, so no credential has to live on the ops VM to
-ask that question.
-
-**Prometheus records, Cloud Monitoring notifies.** Alertmanager has no delivery
-target; email comes from the policies below, so no SMTP credential exists here.
+Alerting is Cloud Monitoring's job, below. Prometheus and Grafana collect and
+show; nothing here evaluates thresholds or notifies, so no SMTP credential
+exists in the project — Google sends the mail.
 
 ## Cloud Monitoring
 
@@ -67,12 +59,12 @@ SSH session IAP already permits:
 ```sh
 gcloud compute ssh petclinic-dev-ops \
   --project=petclinic-capstone --zone=europe-west3-a --tunnel-through-iap -- \
-  -N -L 3000:localhost:3000 -L 9090:localhost:9090 -L 9093:localhost:9093
+  -N -L 3000:localhost:3000 -L 9090:localhost:9090
 ```
 
 Leave it running; `localhost` in `-L` resolves **on the VM**, which is where the
-services are bound. Then Grafana is on 3000, Prometheus 9090, Alertmanager 9093.
-Sign in as `admin`:
+services are bound. Then Grafana is on 3000 and Prometheus on 9090. Sign in as
+`admin`:
 
 ```sh
 gcloud secrets versions access latest --secret=dev-grafana-admin-password
