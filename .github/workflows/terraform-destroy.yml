@@ -30,6 +30,7 @@ env:
   TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform.d/plugin-cache
   WIF_PROVIDER: projects/923128095631/locations/global/workloadIdentityPools/github-pool/providers/github-provider
   WIF_SERVICE_ACCOUNT: sa-terraform@petclinic-capstone.iam.gserviceaccount.com
+  DEPLOY_BUCKET: petclinic-capstone-deploy
 
 jobs:
   guard:
@@ -104,7 +105,7 @@ jobs:
         env:
           ENVIRONMENT: ${{ inputs.environment }}
         run: |
-          BUCKET=petclinic-capstone-tfstate
+          BUCKET="${DEPLOY_BUCKET}"
 
           if gcloud storage cat "gs://${BUCKET}/deploy/${ENVIRONMENT}/app-image-digest" >/dev/null 2>&1; then
             echo "digest=" >> "$GITHUB_OUTPUT"
@@ -182,7 +183,7 @@ jobs:
         env:
           ENVIRONMENT: ${{ inputs.environment }}
         run: |
-          BUCKET=petclinic-capstone-tfstate
+          BUCKET="${DEPLOY_BUCKET}"
 
           if gcloud storage cat "gs://${BUCKET}/deploy/${ENVIRONMENT}/app-image-digest" >/dev/null 2>&1; then
             echo "digest=" >> "$GITHUB_OUTPUT"

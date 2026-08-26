@@ -1,8 +1,9 @@
 name: Resolve the application image digest
 description: >-
   Works out which container digest Terraform should plan or apply against.
-  An environment that has never deployed has no pointer object, so the first
-  run would otherwise fail on a missing object rather than on anything real.
+  An environment that has never deployed has no pointer object. What to do about
+  that differs by intent, so the caller has to say: a plan may borrow another
+  environment's digest to render something, an apply may not.
 
 inputs:
   environment:
@@ -15,9 +16,17 @@ inputs:
   bucket:
     description: Bucket holding the deploy pointers.
     required: false
-    default: petclinic-capstone-tfstate
-  fallback-environment:
-    description: Environment to borrow a digest from when the target has none.
+    default: petclinic-capstone-deploy
+  on-missing:
+    description: >-
+      What to do when the environment has no pointer of its own. "fail" stops
+      with an actionable error - the right answer for anything that changes
+      infrastructure. "borrow" takes borrow-from's digest, which is only safe
+      when nothing will be applied.
+    required: false
+    default: fail
+  borrow-from:
+    description: Environment to borrow a digest from when on-missing is "borrow".
     required: false
     default: dev
 
@@ -37,7 +46,8 @@ runs:
         ENVIRONMENT: ${{ inputs.environment }}
         OVERRIDE: ${{ inputs.override }}
         BUCKET: ${{ inputs.bucket }}
-        FALLBACK: ${{ inputs.fallback-environment }}
+        ON_MISSING: ${{ inputs.on-missing }}
+        BORROW_FROM: ${{ inputs.borrow-from }}
       run: |
         set -euo pipefail
 
@@ -53,6 +63,18 @@ runs:
           exit 0
         fi
 
-        DIGEST="$(gcloud storage cat "gs://${BUCKET}/deploy/${FALLBACK}/app-image-digest" | tr -d '[:space:]')"
-        echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-        echo "::notice::${ENVIRONMENT} has never deployed. Using ${FALLBACK}'s digest ${DIGEST}."
+        case "$ON_MISSING" in
+          borrow)
+            DIGEST="$(gcloud storage cat "gs://${BUCKET}/deploy/${BORROW_FROM}/app-image-digest" | tr -d '[:space:]')"
+            echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+            echo "::warning::${ENVIRONMENT} has never deployed, so this plan is rendered against ${BORROW_FROM}'s digest ${DIGEST}. It shows what ${ENVIRONMENT} would look like running ${BORROW_FROM}'s image, which is not necessarily what will be deployed to it."
+            ;;
+          fail)
+            echo "::error::${ENVIRONMENT} has no recorded digest at gs://${BUCKET}/deploy/${ENVIRONMENT}/app-image-digest, so there is nothing to say which image it should run. Deploy to ${ENVIRONMENT} from the application repository - the deploy records the pointer before it dispatches this apply - or pass app_image_digest explicitly if you know which image you want. Refusing to guess: borrowing another environment's digest here would silently apply that environment's build to ${ENVIRONMENT}."
+            exit 1
+            ;;
+          *)
+            echo "::error::on-missing must be 'fail' or 'borrow', got '${ON_MISSING}'."
+            exit 1
+            ;;
+        esac
