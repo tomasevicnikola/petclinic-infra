@@ -41,7 +41,7 @@ resource "google_monitoring_dashboard" "this" {
       tiles = [
         # ---- Application uptime -------------------------------------------
         {
-          xPos = 0, yPos = 0, width = 6, height = 4
+          xPos = 6, yPos = 0, width = 6, height = 4
           widget = {
             title = "Application uptime — requests by response class"
             xyChart = {
@@ -65,7 +65,7 @@ resource "google_monitoring_dashboard" "this" {
           }
         },
         {
-          xPos = 6, yPos = 0, width = 6, height = 4
+          xPos = 0, yPos = 4, width = 6, height = 4
           widget = {
             title = "Application uptime — round trip through the load balancer"
             xyChart = {
@@ -90,7 +90,7 @@ resource "google_monitoring_dashboard" "this" {
 
         # ---- Resource usage -----------------------------------------------
         {
-          xPos = 0, yPos = 4, width = 6, height = 4
+          xPos = 6, yPos = 4, width = 6, height = 4
           widget = {
             title = "Resource usage — VM CPU"
             xyChart = {
@@ -114,7 +114,7 @@ resource "google_monitoring_dashboard" "this" {
           }
         },
         {
-          xPos = 6, yPos = 4, width = 6, height = 4
+          xPos = 0, yPos = 20, width = 12, height = 4
           widget = {
             title = "Resource usage — memory and disk"
             text = {
@@ -128,11 +128,11 @@ resource "google_monitoring_dashboard" "this" {
                 "application VMs means rebuilding the baked image.",
                 "",
                 "`node_exporter` already reports both, and Prometheus already scrapes it, so",
-                "the numbers exist — they are on the **PetClinic — Node / VM overview**",
+                "the numbers exist — they are on the **PetClinic - rollout & health**",
                 "dashboard in Grafana, reached over the IAP tunnel. See `docs/monitoring.md`.",
                 "",
-                "This is the honest boundary between the two systems: Prometheus is primary",
-                "and sees inside the guest; this view is secondary and sees what Google sees.",
+                "The honest boundary: Prometheus sees inside the guest, this view sees",
+                "what Google sees — and only this view alerts. Prometheus never does.",
               ])
             }
           }
@@ -140,7 +140,7 @@ resource "google_monitoring_dashboard" "this" {
 
         # ---- Database ------------------------------------------------------
         {
-          xPos = 0, yPos = 8, width = 6, height = 4
+          xPos = 0, yPos = 12, width = 6, height = 4
           widget = {
             title = "Database — queries per second"
             xyChart = {
@@ -180,7 +180,7 @@ resource "google_monitoring_dashboard" "this" {
           }
         },
         {
-          xPos = 6, yPos = 8, width = 6, height = 4
+          xPos = 6, yPos = 12, width = 6, height = 4
           widget = {
             title = "Database — latency signals"
             xyChart = {
@@ -222,7 +222,7 @@ resource "google_monitoring_dashboard" "this" {
           }
         },
         {
-          xPos = 0, yPos = 12, width = 6, height = 4
+          xPos = 0, yPos = 16, width = 6, height = 4
           widget = {
             title = "Database — CPU and memory"
             xyChart = {
@@ -261,7 +261,7 @@ resource "google_monitoring_dashboard" "this" {
           }
         },
         {
-          xPos = 6, yPos = 12, width = 6, height = 4
+          xPos = 6, yPos = 16, width = 6, height = 4
           widget = {
             title = "Database — connections"
             xyChart = {
@@ -280,6 +280,51 @@ resource "google_monitoring_dashboard" "this" {
                 legendTemplate = "new connections/s"
               }]
               yAxis = { label = "connections/s", scale = "LINEAR" }
+            }
+          }
+        },
+
+        # ---- Rollout and logs ----------------------------------------------
+        {
+          xPos = 0, yPos = 0, width = 6, height = 4
+          widget = {
+            title = "Rollout — instances reporting"
+            xyChart = {
+              dataSets = [{
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    # Counting series rather than reading a value: every running
+                    # instance reports CPU, so the count is the fleet size. A
+                    # rolling deploy surges it before it removes anything.
+                    filter = "metric.type=\"compute.googleapis.com/instance/cpu/utilization\" AND ${local.vm_filter}"
+                    aggregation = {
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_MEAN"
+                      crossSeriesReducer = "REDUCE_COUNT"
+                    }
+                  }
+                }
+                plotType       = "LINE"
+                targetAxis     = "Y1"
+                legendTemplate = "instances"
+              }]
+              yAxis = { label = "instances", scale = "LINEAR" }
+            }
+          }
+        },
+        {
+          xPos = 0, yPos = 8, width = 12, height = 4
+          widget = {
+            title = "Application logs — requests through the load balancer"
+            logsPanel = {
+              # The load balancer writes these itself; nothing is installed on a
+              # VM to produce them. Sampled at 50%, so this is a representative
+              # view rather than a complete one.
+              filter = join("\n", [
+                "resource.type=\"http_load_balancer\"",
+                "resource.labels.url_map_name=\"${local.url_map}\"",
+              ])
+              resourceNames = ["projects/${var.project_id}"]
             }
           }
         },
@@ -324,11 +369,12 @@ resource "google_monitoring_alert_policy" "high_cpu" {
       Hypervisor-level CPU for one VM in ${var.environment} has been above
       ${var.cpu_threshold * 100}% for ${var.alert_duration}.
 
-      Prometheus alerts on the same condition from inside the guest
-      (`HighCPU`, same threshold, same window), and that one is the primary:
-      it carries the `env` and `zone` labels and is grouped with everything
-      else. This policy exists so the condition is still visible if the
-      monitoring stack itself is the thing that is down.
+      Measured by the hypervisor, so a wedged VM cannot suppress it.
+
+      **The only CPU alert in the project.** Prometheus scrapes the same
+      condition from inside the guest but evaluates no rules; per-VM detail,
+      memory and disk included, is on *PetClinic - rollout & health* in
+      Grafana.
     EOT
   }
 }
@@ -340,13 +386,13 @@ resource "google_monitoring_alert_policy" "application_downtime" {
   enabled      = true
 
   conditions {
-    display_name = "Load balancer serving 5xx for ${var.alert_duration}"
+    display_name = "Load balancer serving more than ${var.error_rate_threshold} 5xx per second"
 
     condition_threshold {
       filter          = "metric.type=\"loadbalancing.googleapis.com/https/request_count\" AND ${local.lb_filter} AND metric.label.\"response_code_class\"=\"500\""
       comparison      = "COMPARISON_GT"
       threshold_value = var.error_rate_threshold
-      duration        = var.alert_duration
+      duration        = var.error_alert_duration
 
       aggregations {
         alignment_period     = "60s"
@@ -365,15 +411,16 @@ resource "google_monitoring_alert_policy" "application_downtime" {
   documentation {
     mime_type = "text/markdown"
     content   = <<-EOT
-      The load balancer in ${var.environment} has been returning server errors
-      at more than ${var.error_rate_threshold}/s for ${var.alert_duration}.
+      The load balancer in ${var.environment} returned server errors at more
+      than ${var.error_rate_threshold}/s - over six in a minute - in a single
+      60-second window.
 
       **This signal depends on traffic.** It measures errors in requests that
       were actually made, so an application that is completely down on a quiet
       system produces no requests, no 5xx, and no incident here. That is
-      exactly why Prometheus' `AppHealthDown` is the primary downtime alert:
-      it scrapes every instance on a timer and probes the load balancer
-      itself, so it fires whether or not anyone is using the system.
+      why the traffic-independent signal is the `application unreachable`
+      policy, driven by the uptime check: Google's probers request the load
+      balancer on their own schedule, whether or not anyone is using it.
 
       Read this one as "users are being served errors", not as "the
       application is up".
@@ -477,7 +524,9 @@ resource "google_monitoring_alert_policy" "uptime" {
         Treat that as a security incident, not an availability one.
 
       Whether the application behind IAP is actually serving is a separate
-      question, answered by Prometheus' `AppHealthDown`.
+      question, and nothing alerts on it. Check *PetClinic - rollout & health*
+      in Grafana, or ask the load balancer with
+      `gcloud compute backend-services get-health`.
     EOT
   }
 }

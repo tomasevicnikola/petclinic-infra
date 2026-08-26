@@ -4,7 +4,7 @@ output "dashboard_id" {
 }
 
 output "alert_policy_names" {
-  description = "Alert policies created here, for cross-checking against the Prometheus rules that cover the same conditions."
+  description = "Alert policies created here. The only alert policies in the project - Prometheus evaluates no rules."
   value = [
     google_monitoring_alert_policy.high_cpu.display_name,
     google_monitoring_alert_policy.application_downtime.display_name,
