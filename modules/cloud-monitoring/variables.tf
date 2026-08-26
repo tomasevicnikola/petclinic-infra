@@ -19,7 +19,7 @@ variable "db_instance_name" {
 }
 
 variable "cpu_threshold" {
-  description = "Instance CPU utilisation, as a fraction, that opens the CPU alert. Matches the Prometheus HighCPU rule so the two never disagree."
+  description = "Instance CPU utilisation, as a fraction, that opens the CPU alert. Measured by the hypervisor, from outside the guest, so a wedged VM cannot suppress it."
   type        = number
   default     = 0.8
 
@@ -33,6 +33,12 @@ variable "error_rate_threshold" {
   description = "Server errors per second at the load balancer that open the downtime alert."
   type        = number
   default     = 0.1
+}
+
+variable "error_alert_duration" {
+  description = "How long the error rate must stay above the threshold before the downtime policy opens an incident. Zero on purpose: one 60s window over the threshold is already the signal. On a system this quiet a longer window would hide every real burst, because a burst here lasts seconds, not minutes - and while it lasts, users are being served 500s. CPU and reachability tolerate a transient and keep the longer window."
+  type        = string
+  default     = "0s"
 }
 
 variable "alert_duration" {
