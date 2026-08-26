@@ -16,7 +16,7 @@ Two phases. Which one a role belongs to is the thing to know before editing it.
 | `node_exporter` | ● | ● | Binds to the instance IP, resolved per boot |
 | `app_runtime` | ● | | Installs the boot-time runner; never runs the app |
 | `gh_runner` | | ● | Self-hosted runner registration |
-| `monitoring_stack` | | ● | Prometheus, Grafana, Alertmanager |
+| `monitoring_stack` | | ● | Prometheus, Grafana |
 
 **Bake** — `playbooks/image.yml`, run by Packer against a throwaway builder VM
 whose disk becomes the `petclinic-app` image. Every application instance boots
@@ -157,7 +157,7 @@ no token file.
 | `node_exporter` | pinned release, checksum verified, dedicated nologin user, hardened unit bound to the internal IP |
 | `gh_runner` | ops only; replaces the manual install and adopts one that already exists |
 | `app_runtime` | the boot-time runner: a systemd unit that reads the image digest from instance metadata, fetches the database credentials and starts the container |
-| `monitoring_stack` | ops only; Prometheus, Grafana and Alertmanager as a digest-pinned compose project bound to loopback |
+| `monitoring_stack` | ops only; Prometheus and Grafana as a digest-pinned compose project bound to loopback |
 
 Everything downloaded is checksum-verified, the Docker apt key is checked twice
 — the sha256 of the file, and the OpenPGP fingerprint of the key inside it — and

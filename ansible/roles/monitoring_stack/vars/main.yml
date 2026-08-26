@@ -1,7 +1,6 @@
 ---
 monitoring_stack_prometheus_ref: "{{ monitoring_stack_prometheus_image }}@{{ monitoring_stack_prometheus_digest }}"
 monitoring_stack_grafana_ref: "{{ monitoring_stack_grafana_image }}@{{ monitoring_stack_grafana_digest }}"
-monitoring_stack_alertmanager_ref: "{{ monitoring_stack_alertmanager_image }}@{{ monitoring_stack_alertmanager_digest }}"
 
 monitoring_stack_compose_file: "{{ monitoring_stack_root }}/docker-compose.yml"
 monitoring_stack_run_script: /usr/local/bin/petclinic-monitoring-up.sh

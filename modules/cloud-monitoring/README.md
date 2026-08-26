@@ -24,8 +24,8 @@ name.
 and the InnoDB lock counters. The application exposes its connection pool and
 nothing about queries, so this is the only place they exist.
 
-**CPU, from outside the guest** — deliberately duplicating the Prometheus
-`HighCPU` rule at the same threshold, where a dead ops VM cannot suppress it.
+**CPU, from outside the guest** — measured by the hypervisor, so a wedged or
+dead VM cannot suppress it the way an in-guest exporter would.
 
 ## What it cannot cover
 
@@ -37,8 +37,8 @@ the dashboard says so on a text tile rather than leaving an empty chart.
 
 It counts 5xx at the load balancer, so an application that is down on a quiet
 system produces no requests and no incident. Read it as "users are being served
-errors". The traffic-independent signals are the uptime check, for reachability,
-and Prometheus' `AppHealthDown`, for the application itself.
+errors". The traffic-independent signal is the uptime check above, which runs
+on Google's schedule whether or not anyone is using the system.
 
 ## Notifications
 
