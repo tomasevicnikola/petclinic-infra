@@ -43,12 +43,17 @@ diffs them and also asserts the set of `.tf` files in each directory.
 ## Running an environment
 
 ```sh
-# apply; app_image_digest is required only the first time, before a deploy has
-# recorded one at deploy/<env>/app-image-digest
-gh workflow run terraform-apply.yml -f environment=qa -f app_image_digest=sha256:...
+# Standing an environment up: deploy to it. The deploy records the digest at
+# deploy/<env>/app-image-digest and dispatches the apply itself, so a brand-new
+# environment needs nothing placed by hand first.
+gh workflow run deploy.yml -f version=v1.5.0 -f environment=qa   # app repository
 
-# deploy a release (app repository)
-gh workflow run deploy.yml -f version=v1.5.0 -f environment=qa
+# Applying directly - a firewall change, a monitoring tweak. An environment that
+# has already deployed needs no digest: Terraform reads its pointer. One that
+# never has must say which image it wants, because the apply will not guess and
+# will not inherit another environment's build.
+gh workflow run terraform-apply.yml -f environment=qa
+gh workflow run terraform-apply.yml -f environment=qa -f app_image_digest=sha256:...
 
 # destroy
 gh workflow run terraform-destroy.yml -f environment=qa -f confirm=qa

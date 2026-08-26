@@ -351,6 +351,10 @@ jobs:
         uses: ./.github/actions/resolve-digest
         with:
           environment: ${{ matrix.environment }}
+          # A pull-request plan applies nothing, and every environment has to
+          # render one whether or not it has ever deployed. Borrowing is safe
+          # here and only here - terraform-apply leaves this at "fail".
+          on-missing: borrow
 
       - name: terraform init
         working-directory: envs/${{ matrix.environment }}

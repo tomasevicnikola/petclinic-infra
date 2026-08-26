@@ -95,6 +95,10 @@ jobs:
         with:
           environment: ${{ inputs.environment }}
           override: ${{ inputs.app_image_digest }}
+          # on-missing defaults to "fail". This workflow changes real
+          # infrastructure, so an environment with no pointer of its own must
+          # say which image it wants rather than inherit dev's.
+          on-missing: fail
 
       - name: terraform init
         working-directory: envs/${{ inputs.environment }}
@@ -165,6 +169,10 @@ jobs:
         with:
           environment: ${{ inputs.environment }}
           override: ${{ inputs.app_image_digest }}
+          # on-missing defaults to "fail". This workflow changes real
+          # infrastructure, so an environment with no pointer of its own must
+          # say which image it wants rather than inherit dev's.
+          on-missing: fail
 
       - name: terraform init
         working-directory: envs/${{ inputs.environment }}

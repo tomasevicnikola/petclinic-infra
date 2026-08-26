@@ -24,6 +24,12 @@ KMS_ROTATION="90d"
 
 BUCKET="${PROJECT_ID}-tfstate"
 
+# Deployed-digest pointers live in their own bucket, not alongside state.
+# An IAM condition cannot express "may write only under deploy/": the write path
+# needs storage.objects.list, which is evaluated against the *bucket*, and a
+# bucket name can never satisfy an objects/ prefix condition. See ADR 0019.
+DEPLOY_BUCKET="${PROJECT_ID}-deploy"
+
 WIF_POOL="github-pool"
 WIF_PROVIDER="github-provider"
 
@@ -69,6 +75,31 @@ grant_project_role() {
     --condition=None \
     --quiet >/dev/null
   bound "${role} -> ${email}"
+}
+
+# Both buckets get the same protections; only their contents differ.
+ensure_bucket() {
+  local name="$1" purpose="$2"
+
+  if gcloud storage buckets describe "gs://${name}" --project="${PROJECT_ID}" &>/dev/null; then
+    exists "bucket gs://${name} (${purpose})"
+  else
+    gcloud storage buckets create "gs://${name}" \
+      --project="${PROJECT_ID}" \
+      --location="${REGION}" \
+      --uniform-bucket-level-access \
+      --public-access-prevention \
+      --default-encryption-key="${KMS_KEY_ID}" >/dev/null
+    created "bucket gs://${name} (${purpose})"
+  fi
+
+  gcloud storage buckets update "gs://${name}" \
+    --project="${PROJECT_ID}" \
+    --versioning \
+    --uniform-bucket-level-access \
+    --public-access-prevention \
+    --default-encryption-key="${KMS_KEY_ID}" >/dev/null
+  printf '  %s[enforced]%s versioning, UBLA, PAP, CMEK on gs://%s\n' "${GREEN}" "${NC}" "${name}"
 }
 
 # ------------------------------------------------------------ preflight -----
@@ -147,29 +178,38 @@ for attempt in 1 2 3 4 5; do
   sleep 5
 done
 
-# -------------------------------------------------- 2. state bucket ---------
+# -------------------------------------------------- 2. GCS buckets ----------
 
-step "2. GCS bucket for Terraform state"
+step "2. GCS buckets (Terraform state, deploy pointers)"
 
-if gcloud storage buckets describe "gs://${BUCKET}" --project="${PROJECT_ID}" &>/dev/null; then
-  exists "bucket gs://${BUCKET}"
+ensure_bucket "${BUCKET}" "Terraform state"
+
+# Separate from state so that "may touch deploy pointers, may not touch state"
+# is a bucket boundary rather than an IAM condition. Conditions cannot carry it:
+# the deploy runner's write path needs storage.objects.list, which is checked
+# against the bucket, and no objects/ prefix condition can ever match a bucket.
+ensure_bucket "${DEPLOY_BUCKET}" "deployed-digest pointers"
+
+# One-time carry-over for projects bootstrapped before ADR 0019. Without it an
+# environment that has already deployed would have no pointer in the new bucket,
+# and `terraform apply` would refuse to guess which image it runs until someone
+# redeployed. Never overwrites: past the first run the deploy pipeline owns
+# these objects and this script must not move them backwards.
+if gcloud storage ls "gs://${BUCKET}/deploy/**" &>/dev/null; then
+  while read -r src; do
+    [[ -n "${src}" ]] || continue
+    dst="gs://${DEPLOY_BUCKET}/${src#"gs://${BUCKET}/"}"
+
+    if gcloud storage ls "${dst}" &>/dev/null; then
+      exists "pointer ${dst}"
+    else
+      gcloud storage cp "${src}" "${dst}" >/dev/null
+      created "pointer ${dst} (carried over from gs://${BUCKET})"
+    fi
+  done < <(gcloud storage ls "gs://${BUCKET}/deploy/**" 2>/dev/null)
 else
-  gcloud storage buckets create "gs://${BUCKET}" \
-    --project="${PROJECT_ID}" \
-    --location="${REGION}" \
-    --uniform-bucket-level-access \
-    --public-access-prevention \
-    --default-encryption-key="${KMS_KEY_ID}" >/dev/null
-  created "bucket gs://${BUCKET}"
+  printf '  %s[none]%s no pointers to carry over from gs://%s\n' "${YELLOW}" "${NC}" "${BUCKET}"
 fi
-
-gcloud storage buckets update "gs://${BUCKET}" \
-  --project="${PROJECT_ID}" \
-  --versioning \
-  --uniform-bucket-level-access \
-  --public-access-prevention \
-  --default-encryption-key="${KMS_KEY_ID}" >/dev/null
-printf '  %s[enforced]%s versioning, UBLA, PAP, CMEK\n' "${GREEN}" "${NC}"
 
 # --------------------------------------------- 3. service accounts ----------
 
@@ -224,6 +264,14 @@ gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
   --quiet >/dev/null
 bound "roles/storage.objectAdmin -> ${TERRAFORM_SA} (on gs://${BUCKET} only)"
 
+# Terraform only reads the pointers; the deploy pipeline is what writes them.
+gcloud storage buckets add-iam-policy-binding "gs://${DEPLOY_BUCKET}" \
+  --project="${PROJECT_ID}" \
+  --member="serviceAccount:${TERRAFORM_SA}" \
+  --role="roles/storage.objectViewer" \
+  --quiet >/dev/null
+bound "roles/storage.objectViewer -> ${TERRAFORM_SA} (on gs://${DEPLOY_BUCKET} only)"
+
 # Can use the key, can't create or destroy keys.
 gcloud kms keys add-iam-policy-binding "${KMS_KEY}" \
   --keyring="${KMS_KEYRING}" \
@@ -276,13 +324,34 @@ gcloud iam service-accounts add-iam-policy-binding "${APP_VM_SA}" \
   --quiet >/dev/null
 bound "roles/iam.serviceAccountUser -> ${OPS_VM_SA} (on ${APP_VM_SA} only)"
 
-gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
+# Unconditioned, on the pointer bucket only. A condition here would be worse
+# than useless: roles/storage.objectUser includes storage.objects.list, but a
+# list is authorised against the bucket, whose resource.name can never start
+# with .../objects/deploy/. That made every *first* write to an environment
+# impossible while overwrites kept working, so only dev - hand-seeded - ever
+# succeeded. The boundary is the bucket now. See ADR 0019.
+gcloud storage buckets add-iam-policy-binding "gs://${DEPLOY_BUCKET}" \
   --project="${PROJECT_ID}" \
   --member="serviceAccount:${OPS_VM_SA}" \
   --role="roles/storage.objectUser" \
-  --condition="title=deploy-pointers-only,expression=resource.name.startsWith('projects/_/buckets/${BUCKET}/objects/deploy/')" \
+  --condition=None \
   --quiet >/dev/null
-bound "roles/storage.objectUser -> ${OPS_VM_SA} (on gs://${BUCKET}/deploy/ only)"
+bound "roles/storage.objectUser -> ${OPS_VM_SA} (on gs://${DEPLOY_BUCKET}, unconditioned)"
+
+# Converge projects bootstrapped before ADR 0019: drop every objectUser binding
+# for the ops runner on the state bucket, conditioned or not. --all rather than
+# a literal --condition, because the live binding may carry a description this
+# script never set. Absent binding is not an error worth stopping for.
+if gcloud storage buckets remove-iam-policy-binding "gs://${BUCKET}" \
+     --project="${PROJECT_ID}" \
+     --member="serviceAccount:${OPS_VM_SA}" \
+     --role="roles/storage.objectUser" \
+     --all \
+     --quiet >/dev/null 2>&1; then
+  bound "removed roles/storage.objectUser <- ${OPS_VM_SA} (on gs://${BUCKET})"
+else
+  exists "no roles/storage.objectUser for ${OPS_VM_SA} on gs://${BUCKET}"
+fi
 
 step "3e. Roles: ${SA_PACKER}"
 
@@ -392,6 +461,9 @@ ${BOLD}================================================================${NC}
   Terraform backend:
     bucket = "${BUCKET}"
     prefix = "envs/dev"
+
+  Deploy pointer bucket (deploy_state_bucket / DEPLOY_BUCKET):
+    ${DEPLOY_BUCKET}
 
 Example step (needs: permissions: id-token: write, contents: read)
 

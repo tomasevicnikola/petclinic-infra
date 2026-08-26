@@ -144,9 +144,9 @@ variable "app_image_digest" {
 }
 
 variable "deploy_state_bucket" {
-  description = "Bucket holding the deployed-digest pointer."
+  description = "Bucket holding the deployed-digest pointers. Separate from the Terraform state bucket on purpose - see ADR 0019."
   type        = string
-  default     = "petclinic-capstone-tfstate"
+  default     = "petclinic-capstone-deploy"
 }
 
 variable "app_min_replicas" {
