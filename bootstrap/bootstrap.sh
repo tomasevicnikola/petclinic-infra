@@ -257,10 +257,15 @@ for role in "${TERRAFORM_ROLES[@]}"; do
 done
 
 # On the bucket, not the project: state objects and nothing else in GCS.
+# --condition=None is required, not decorative: gcloud refuses to add an
+# unconditioned binding to a policy that already contains a condition unless the
+# intent is explicit. Without it this line fails on any re-run against a bucket
+# whose policy has ever held one, which is what "safe to re-run" has to mean.
 gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
   --project="${PROJECT_ID}" \
   --member="serviceAccount:${TERRAFORM_SA}" \
   --role="roles/storage.objectAdmin" \
+  --condition=None \
   --quiet >/dev/null
 bound "roles/storage.objectAdmin -> ${TERRAFORM_SA} (on gs://${BUCKET} only)"
 
@@ -269,6 +274,7 @@ gcloud storage buckets add-iam-policy-binding "gs://${DEPLOY_BUCKET}" \
   --project="${PROJECT_ID}" \
   --member="serviceAccount:${TERRAFORM_SA}" \
   --role="roles/storage.objectViewer" \
+  --condition=None \
   --quiet >/dev/null
 bound "roles/storage.objectViewer -> ${TERRAFORM_SA} (on gs://${DEPLOY_BUCKET} only)"
 
