@@ -21,12 +21,22 @@ environment appears on its own.
 
 ## Grafana dashboards
 
-Two, provisioned from JSON committed in the role. Each has an `env` selector.
+One, provisioned from JSON committed in the role, with an `env` selector.
 
 | Dashboard | Contents |
 | --- | --- |
-| Node / VM overview | CPU, load, memory, disk, network per VM, plus scrape health |
-| JVM / application | request rate, latency, errors, heap, GC, connection pool, log event rate |
+| PetClinic - rollout & health | instances serving over time, requests/s, 5xx share, heap; CPU, memory and root disk per VM |
+
+`Instances over time` is drawn stepped. `refresh` is 10s over a 30-minute
+window, against a 15s scrape.
+
+`node-overview.json` and `jvm-app.json` remain in
+`roles/monitoring_stack/files/dashboards/` and are not provisioned. List either
+in `roles/monitoring_stack/vars/main.yml` to bring it back.
+
+Uptime probes are answered by IAP at the load balancer and never reach the
+application, so `Requests per second` and `5xx share` only move under real
+traffic.
 
 ## Alerts
 
