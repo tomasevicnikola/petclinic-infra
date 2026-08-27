@@ -236,7 +236,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (status) (rate(http_server_requests_seconds_count{job=\"petclinic-app\", env=~\"$env\"}[2m]))",
+          "expr": "sum by (status) (rate(http_server_requests_seconds_count{job=\"petclinic-app\", env=~\"$env\"}[1m]))",
           "legendFormat": "{{status}}",
           "range": true,
           "refId": "A"
@@ -303,7 +303,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 * (sum(rate(http_server_requests_seconds_count{job=\"petclinic-app\", env=~\"$env\", status=~\"5..\"}[2m])) or vector(0)) / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"petclinic-app\", env=~\"$env\"}[2m])), 0.001)",
+          "expr": "100 * (sum(rate(http_server_requests_seconds_count{job=\"petclinic-app\", env=~\"$env\", status=~\"5..\"}[1m])) or vector(0)) / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"petclinic-app\", env=~\"$env\"}[1m])), 0.001)",
           "legendFormat": "5xx %",
           "range": true,
           "refId": "A"
@@ -438,7 +438,7 @@
       "type": "timeseries",
       "title": "CPU used",
       "id": 9,
-      "description": "From node_exporter inside the guest. Cloud Monitoring sees the hypervisor's view of the same thing; this one is per-instance and arrives every scrape.",
+      "description": "Share of the machine's capacity in use, across both guest cores. The autoscaler reads a different denominator - Compute Engine reports CPU against the single baseline vCPU an e2-medium is allocated - so its numbers run about twice these. Application instances only; the ops VM is scraped by the node-ops job and is not shown here.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -450,7 +450,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{job=~\"node.*\", env=~\"$env\", mode=\"idle\"}[2m])) * 100)",
+          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{job=\"node\", env=~\"$env\", mode=\"idle\"}[1m])) * 100)",
           "legendFormat": "{{instance}}",
           "range": true,
           "refId": "A"
@@ -463,7 +463,6 @@
           },
           "unit": "percent",
           "min": 0,
-          "max": 100,
           "custom": {
             "drawStyle": "line",
             "lineInterpolation": "linear",
@@ -477,7 +476,8 @@
               "mode": "none",
               "group": "A"
             }
-          }
+          },
+          "max": 100
         },
         "overrides": []
       },
@@ -507,7 +507,7 @@
       "type": "timeseries",
       "title": "Memory used",
       "id": 10,
-      "description": "Guest memory. Cloud Monitoring cannot see this without the Ops Agent, which is deliberately not installed - this is why Prometheus is the required half of the monitoring story.",
+      "description": "Guest memory. Cloud Monitoring cannot see this without the Ops Agent, which is deliberately not installed - this is why Prometheus is the required half of the monitoring story. Application instances only; the ops VM is scraped by the node-ops job and is not shown here.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -519,7 +519,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{job=~\"node.*\", env=~\"$env\"} / clamp_min(node_memory_MemTotal_bytes{job=~\"node.*\", env=~\"$env\"}, 1)))",
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes{job=\"node\", env=~\"$env\"} / clamp_min(node_memory_MemTotal_bytes{job=\"node\", env=~\"$env\"}, 1)))",
           "legendFormat": "{{instance}}",
           "range": true,
           "refId": "A"
@@ -576,7 +576,7 @@
       "type": "timeseries",
       "title": "Root filesystem used",
       "id": 11,
-      "description": "Also guest-only. A replaced instance restarts this at the image's baseline, which is a second way to see the rollout.",
+      "description": "Also guest-only. A replaced instance restarts this at the image's baseline, which is a second way to see the rollout. Application instances only; the ops VM is scraped by the node-ops job and is not shown here.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -588,7 +588,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 * (1 - (node_filesystem_avail_bytes{job=~\"node.*\", env=~\"$env\", mountpoint=\"/\"} / clamp_min(node_filesystem_size_bytes{job=~\"node.*\", env=~\"$env\", mountpoint=\"/\"}, 1)))",
+          "expr": "100 * (1 - (node_filesystem_avail_bytes{job=\"node\", env=~\"$env\", mountpoint=\"/\"} / clamp_min(node_filesystem_size_bytes{job=\"node\", env=~\"$env\", mountpoint=\"/\"}, 1)))",
           "legendFormat": "{{instance}}",
           "range": true,
           "refId": "A"
