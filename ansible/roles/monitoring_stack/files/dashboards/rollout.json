@@ -75,7 +75,7 @@
     },
     {
       "type": "stat",
-      "title": "Instances serving now",
+      "title": "Instances now",
       "id": 2,
       "description": "Application instances Prometheus can scrape. A rolling deploy surges this above the steady-state count, then settles back once the old instances are gone.",
       "datasource": {
@@ -144,7 +144,7 @@
           },
           "editorMode": "code",
           "expr": "count(up{job=\"petclinic-app\", env=~\"$env\"} == 1)",
-          "legendFormat": "serving",
+          "legendFormat": "up",
           "range": true,
           "refId": "A"
         },
