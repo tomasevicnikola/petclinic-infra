@@ -77,6 +77,17 @@ variable "backend_timeout_sec" {
   }
 }
 
+variable "connection_draining_timeout_sec" {
+  description = "How long the load balancer lets in-flight requests finish on an instance it has stopped sending traffic to. The rolling update cannot delete an old instance until this elapses, so it sets the floor on deploy time. 60s is twice backend_timeout_sec, which already caps any single request at 30s."
+  type        = number
+  default     = 60
+
+  validation {
+    condition     = var.connection_draining_timeout_sec >= 0 && var.connection_draining_timeout_sec <= 3600
+    error_message = "connection_draining_timeout_sec must be between 0 and 3600."
+  }
+}
+
 variable "max_utilization" {
   description = "Backend utilisation the balancer aims for before spreading load further."
   type        = number
