@@ -112,9 +112,9 @@ variable "enable_autohealing" {
 }
 
 variable "autohealing_initial_delay_sec" {
-  description = "Grace period after an instance boots before the autohealing check counts against it. Has to cover boot, container pull and JVM start: roughly 20s boot + 25s pull + 35s JVM = 80s typical, doubled for a cold registry or a slow disk, then rounded up for margin. 240s rather than the 300s the old unbaked instances needed, because Docker and the runner are already on the disk."
+  description = "Grace period after an instance boots before the autohealing check counts against it. Also gates the rolling update, so it sets the floor on how long a deploy takes. Measured creation to serving is 56-121s over four deploys; autohealing then needs a further 5 failed checks at 30s on top of this delay, so nothing is replaced before 300s at this value - roughly 2.5x the slowest boot observed."
   type        = number
-  default     = 240
+  default     = 150
 
   validation {
     condition     = var.autohealing_initial_delay_sec >= 0 && var.autohealing_initial_delay_sec <= 3600
