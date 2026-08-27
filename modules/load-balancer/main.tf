@@ -45,10 +45,11 @@ resource "google_compute_backend_service" "this" {
   name        = "${var.name_prefix}-backend"
   description = "Application backend. Reports UNHEALTHY until the instances actually run the app."
 
-  protocol              = "HTTP"
-  port_name             = var.port_name
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-  timeout_sec           = var.backend_timeout_sec
+  protocol                        = "HTTP"
+  port_name                       = var.port_name
+  load_balancing_scheme           = "EXTERNAL_MANAGED"
+  timeout_sec                     = var.backend_timeout_sec
+  connection_draining_timeout_sec = var.connection_draining_timeout_sec
 
   health_checks = [var.health_check_self_link]
 
