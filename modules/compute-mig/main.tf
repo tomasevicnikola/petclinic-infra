@@ -86,14 +86,10 @@ resource "google_compute_health_check" "autohealing" {
   project = var.project_id
   name    = "${var.name_prefix}-autoheal-hc"
 
-  # A rolling update waits for this check to call a new instance healthy, so
-  # the interval sets how long the group sits on a working instance before it
-  # will retire an old one. unhealthy_threshold is raised in step, keeping the
-  # time to condemn an instance at 150s while cutting the time to accept one.
-  check_interval_sec  = 10
+  check_interval_sec  = 30
   timeout_sec         = 10
   healthy_threshold   = 2
-  unhealthy_threshold = 15
+  unhealthy_threshold = 5
 
   http_health_check {
     port         = var.app_port
